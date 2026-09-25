@@ -306,9 +306,6 @@ export default function CustomerProfilePage() {
                 <div>
                   <h3 className="text-base font-bold text-slate-900">{liveProfile?.name || user?.username}</h3>
                   <p className="text-xs text-slate-500 font-mono">@{user?.username} · {liveProfile?.email || user?.email || "No email"}</p>
-                  {liveProfile?.balance !== undefined && (
-                    <p className="text-xs font-semibold text-emerald-600 mt-0.5">Wallet Balance: ৳{Number(liveProfile.balance).toFixed(2)}</p>
-                  )}
                 </div>
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
                   <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-1.5 text-xs font-semibold shadow-xs transition">

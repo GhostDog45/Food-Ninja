@@ -28,12 +28,12 @@ SET status = %s
 WHERE username = %s;
 
 --name:get_all_users
-SELECT username, name, email, phone, balance, status
+SELECT username, name, email, phone, status
 FROM users
 ORDER BY username ASC;
 
 --name:get_users_by_status
-SELECT U.username, U.name, U.email, U.phone, U.balance, U.status
+SELECT U.username, U.name, U.email, U.phone, U.status
 FROM users U
 WHERE (
                 U.status = %s
@@ -191,7 +191,7 @@ WHERE restaurant_id = %s
 ORDER BY subcategory NULLS FIRST, category ASC, name ASC;
 
 --name:get_admin_user_details
-SELECT username, name, email, phone, balance, pfp_url AS pfp, location, status, reg_date
+SELECT username, name, email, phone, pfp_url AS pfp, location, status, reg_date
 FROM users WHERE username = %s;
 
 --name:get_admin_rider_details

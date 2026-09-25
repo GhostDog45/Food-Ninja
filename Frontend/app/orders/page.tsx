@@ -84,7 +84,13 @@ export default function OrderHistoryPage() {
     setIsLoading(true);
     try {
       const data = await apiGetUserOrders();
-      setOrders(data);
+      const uniqueMap = new Map<string, CustomerOrder>();
+      for (const item of data) {
+        if (!uniqueMap.has(item.order_id)) {
+          uniqueMap.set(item.order_id, item);
+        }
+      }
+      setOrders(Array.from(uniqueMap.values()));
     } catch {
       setOrders([]);
     } finally {
@@ -176,13 +182,14 @@ export default function OrderHistoryPage() {
         actions={
           <div className="flex items-center gap-2">
             {activeCount > 0 && (
-              <Link
-                href="/orders/active"
-                className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-500/20 transition"
+              <button
+                type="button"
+                onClick={() => setFilter("active")}
+                className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-500/20 transition cursor-pointer"
               >
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>{activeCount} Active Delivery</span>
-              </Link>
+              </button>
             )}
             <Badge tone="primary">{orders.length} Total Orders</Badge>
           </div>

@@ -247,13 +247,49 @@ SELECT
     RV.restaurant_review,
     RV.timestamp::text AS review_timestamp
 FROM orders O
-JOIN cart C ON O.cart_id = C.cart_id
-JOIN restaurant R ON C.restaurant_id = R.restaurant_id
+LEFT JOIN cart C ON O.cart_id = C.cart_id
+LEFT JOIN restaurant R ON C.restaurant_id = R.restaurant_id
 LEFT JOIN payment P ON O.order_id = P.order_id
 LEFT JOIN rider RD ON O.rider_username = RD.username
 LEFT JOIN review RV ON O.order_id = RV.order_id
-WHERE O.username = %s
+WHERE LOWER(O.username) = LOWER(%s)
 ORDER BY O.order_timestamp DESC;
+
+--name:get_order_detail
+SELECT 
+    O.order_id,
+    O.username,
+    O.cart_id,
+    O.rider_username,
+    O.status,
+    O.bill,
+    O.order_timestamp::text,
+    O.final_timestamp::text,
+    ST_Y(O.location::geometry) AS latitude,
+    ST_X(O.location::geometry) AS longitude,
+    P.payment_method,
+    P.status AS payment_status,
+    P.transaction_id,
+    R.restaurant_id,
+    COALESCE(R.name, 'Restaurant') AS restaurant_name,
+    ST_Y(R.location::geometry) AS restaurant_latitude,
+    ST_X(R.location::geometry) AS restaurant_longitude,
+    ROUND(ST_Distance(R.location, O.location)::numeric, 0) AS distance_meters,
+    RD.name AS rider_name,
+    RD.phone AS rider_phone,
+    RD.vehicle AS rider_vehicle,
+    RV.rider_rating,
+    RV.rider_review,
+    RV.restaurant_rating,
+    RV.restaurant_review,
+    RV.timestamp::text AS review_timestamp
+FROM orders O
+LEFT JOIN cart C ON O.cart_id = C.cart_id
+LEFT JOIN restaurant R ON C.restaurant_id = R.restaurant_id
+LEFT JOIN payment P ON O.order_id = P.order_id
+LEFT JOIN rider RD ON O.rider_username = RD.username
+LEFT JOIN review RV ON O.order_id = RV.order_id
+WHERE (O.order_id = %s OR LOWER(O.order_id) = LOWER(%s)) AND LOWER(O.username) = LOWER(%s);
 
 --name:get_order_by_id
 SELECT 
@@ -271,7 +307,7 @@ SELECT
     P.status AS payment_status,
     P.transaction_id,
     R.restaurant_id,
-    R.name AS restaurant_name,
+    COALESCE(R.name, 'Restaurant') AS restaurant_name,
     ST_Y(R.location::geometry) AS restaurant_latitude,
     ST_X(R.location::geometry) AS restaurant_longitude,
     ROUND(ST_Distance(R.location, O.location)::numeric, 0) AS distance_meters,
@@ -284,12 +320,12 @@ SELECT
     RV.restaurant_review,
     RV.timestamp::text AS review_timestamp
 FROM orders O
-JOIN cart C ON O.cart_id = C.cart_id
-JOIN restaurant R ON C.restaurant_id = R.restaurant_id
+LEFT JOIN cart C ON O.cart_id = C.cart_id
+LEFT JOIN restaurant R ON C.restaurant_id = R.restaurant_id
 LEFT JOIN payment P ON O.order_id = P.order_id
 LEFT JOIN rider RD ON O.rider_username = RD.username
 LEFT JOIN review RV ON O.order_id = RV.order_id
-WHERE O.order_id = %s AND O.username = %s;
+WHERE (O.order_id = %s OR LOWER(O.order_id) = LOWER(%s)) AND LOWER(O.username) = LOWER(%s);
 
 --name:get_order_items
 SELECT 

@@ -63,7 +63,7 @@ def get_user_profile():
         with get_connection() as conn, conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT username, name, email, phone, balance, pfp_url,
+                SELECT username, name, email, phone, pfp_url,
                        ST_Y(location::geometry) AS latitude,
                        ST_X(location::geometry) AS longitude,
                        status, reg_date::text AS reg_date

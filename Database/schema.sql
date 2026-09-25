@@ -27,7 +27,6 @@ CREATE TABLE users (
 	username varchar(64) PRIMARY KEY,
 	phone varchar(20) NOT NULL UNIQUE,
 	email varchar(254) NOT NULL UNIQUE,
-	balance numeric(10, 2) DEFAULT 0.00 NOT NULL,
 	pfp_url varchar(255),
 	location geography(Point, 4326),
 	name varchar(100) NOT NULL,
@@ -96,6 +95,15 @@ CREATE TABLE orders (
 	order_timestamp timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	final_timestamp timestamp,
 	bill text NOT NULL
+);
+
+CREATE TABLE payment (
+	order_id varchar(64) PRIMARY KEY REFERENCES orders(order_id) ON DELETE CASCADE,
+	username varchar(64) NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+	transaction_id varchar(100) NOT NULL UNIQUE,
+	payment_method varchar(50) NOT NULL DEFAULT 'Cash on delivery',
+	status varchar(20) DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
+	timestamp timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE TABLE review (

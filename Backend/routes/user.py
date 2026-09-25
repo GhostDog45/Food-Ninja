@@ -740,7 +740,12 @@ def get_orders():
                 rows = cur.fetchall()
 
                 orders = []
+                seen_order_ids = set()
                 for o in rows:
+                    oid = o.get("order_id")
+                    if oid in seen_order_ids:
+                        continue
+                    seen_order_ids.add(oid)
                     o_rest_lat = float(o["restaurant_latitude"]) if o.get("restaurant_latitude") is not None else 23.726154
                     o_rest_lon = float(o["restaurant_longitude"]) if o.get("restaurant_longitude") is not None else 90.390298
                     o_user_lat = float(o["latitude"]) if o.get("latitude") is not None else 23.726154
@@ -799,11 +804,27 @@ def get_order_detail(order_id):
         return err
 
     username = payload.get("username")
+    clean_id = (order_id or "").strip()
 
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(load_query("user.sql", "get_order_detail"), (order_id, username))
+                # If requested as "active", resolve to latest pending/delivering order
+                if clean_id.lower() == "active":
+                    cur.execute(
+                        """
+                        SELECT order_id FROM orders 
+                        WHERE LOWER(username) = LOWER(%s) AND status IN ('pending', 'delivering')
+                        ORDER BY order_timestamp DESC LIMIT 1
+                        """,
+                        (username,)
+                    )
+                    active_row = cur.fetchone()
+                    if not active_row:
+                        return jsonify({"success": False, "message": "No active delivery in progress"}), 404
+                    clean_id = active_row["order_id"]
+
+                cur.execute(load_query("user.sql", "get_order_detail"), (clean_id, clean_id, username))
                 o = cur.fetchone()
 
                 if not o:

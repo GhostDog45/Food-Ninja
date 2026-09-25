@@ -825,7 +825,6 @@ export type AdminUserRow = {
   name: string;
   email: string;
   phone: string;
-  balance: string | number;
   status: string;
 };
 
@@ -1337,7 +1336,6 @@ export type UserProfile = {
   name: string;
   email: string;
   phone: string;
-  balance: number;
   pfp_url?: string | null;
   latitude?: number | null;
   longitude?: number | null;

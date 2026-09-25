@@ -93,6 +93,7 @@ export default function CheckoutPage() {
   }
 
   async function handleConfirmOrder() {
+    if (isPlacingOrder) return;
     if (!cart || cart.items.length === 0) {
       toast("Your cart is empty.", "warning");
       return;
