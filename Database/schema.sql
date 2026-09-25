@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 
 CREATE TABLE food_category (
 	category varchar(50) PRIMARY KEY,
-	picture bytea
+	picture_url varchar(255)
 );
 
 CREATE TABLE admin (
@@ -28,7 +28,7 @@ CREATE TABLE users (
 	phone varchar(20) NOT NULL UNIQUE,
 	email varchar(254) NOT NULL UNIQUE,
 	balance numeric(10, 2) DEFAULT 0.00 NOT NULL,
-	pfp bytea,
+	pfp_url varchar(255),
 	location geography(Point, 4326),
 	name varchar(100) NOT NULL,
 	password_hash varchar(255) NOT NULL,
@@ -45,7 +45,7 @@ CREATE TABLE rider (
 	vehicle varchar(50) NOT NULL CHECK (vehicle IN ('bike', 'bicycle')),
 	location geography(Point, 4326),
 	balance numeric(10, 2) DEFAULT 0.00 NOT NULL,
-	pfp bytea,
+	pfp_url varchar(255),
 	status varchar(20) DEFAULT 'pending' CHECK (status IN ('pending', 'online', 'offline', 'banned', 'delivering')),
 	reg_date timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -68,7 +68,7 @@ CREATE TABLE foods (
 	price numeric(10, 2) NOT NULL CHECK (price >= 0),
 	discount numeric(5, 2) DEFAULT 0.00 CHECK (discount >= 0 AND discount <= 100),
 	description text,
-	picture bytea,
+	picture_url varchar(255),
 	subcategory varchar(50)
 );
 

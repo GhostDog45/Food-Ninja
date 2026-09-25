@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -15,6 +15,7 @@ from routes.owner import owner_bp
 from routes.admin import admin_bp
 from routes.rider import rider_bp, register_websocket_routes
 from routes.user import user_bp
+from routes.uploads import uploads_bp
 
 
 load_dotenv()
@@ -23,6 +24,9 @@ app = Flask(__name__)
 
 # Enable CORS for frontend integration (e.g. Next.js on localhost:3000)
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Register blueprints
 app.register_blueprint(login_bp)
@@ -37,7 +41,13 @@ app.register_blueprint(owner_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(rider_bp)
 app.register_blueprint(user_bp)
+app.register_blueprint(uploads_bp)
 register_websocket_routes(app)
+
+
+@app.route("/uploads/<path:filename>", methods=["GET"])
+def serve_uploads(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
 
 @app.route("/", methods=["GET"])

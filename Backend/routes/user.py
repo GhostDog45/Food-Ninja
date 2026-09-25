@@ -50,7 +50,8 @@ def get_categories():
                 cur.execute(load_query("user.sql", "get_all_food_categories"))
                 rows = cur.fetchall()
                 categories = [r["category"] for r in rows]
-                return jsonify({"success": True, "categories": categories}), 200
+                categories_detail = [{"category": r["category"], "picture_url": r.get("picture_url")} for r in rows]
+                return jsonify({"success": True, "categories": categories, "categories_detail": categories_detail}), 200
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 

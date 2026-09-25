@@ -16,6 +16,10 @@ import {
   apiUpdateLocation,
   setOnboarded,
   getOnboardingDetails,
+  apiGetUserProfile,
+  apiUploadUserPfp,
+  getImageUrl,
+  type UserProfile,
 } from "@/lib/backend";
 import { OSMLocationPicker } from "@/components/osm-location-picker";
 
@@ -24,6 +28,8 @@ export default function CustomerProfilePage() {
   const { toast } = useToast();
 
   const [user, setUser] = useState<{ username: string; user_type: string; email?: string } | null>(null);
+  const [liveProfile, setLiveProfile] = useState<UserProfile | null>(null);
+  const [uploadingPfp, setUploadingPfp] = useState(false);
   const [profileDetails, setProfileDetails] = useState<Record<string, any> | null>(null);
 
   // Location state
@@ -67,6 +73,16 @@ export default function CustomerProfilePage() {
     const authUser = getAuthUser();
     if (authUser) {
       setUser(authUser);
+      apiGetUserProfile()
+        .then((p) => {
+          setLiveProfile(p);
+          if (p.latitude && p.longitude) {
+            setTempLat(Number(p.latitude));
+            setTempLng(Number(p.longitude));
+          }
+        })
+        .catch(() => {});
+
       const details = getOnboardingDetails(authUser.username);
       if (details) {
         setProfileDetails(details);
@@ -76,6 +92,29 @@ export default function CustomerProfilePage() {
       }
     }
   }, []);
+
+  async function handlePfpUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast(`Picture exceeds the 5 MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please select a file smaller than 5 MB.`, "danger");
+      e.target.value = "";
+      return;
+    }
+
+    setUploadingPfp(true);
+    try {
+      const res = await apiUploadUserPfp(file);
+      toast(res.message || "Profile picture updated successfully!", "success");
+      setLiveProfile((prev) => (prev ? { ...prev, pfp_url: res.pfp_url } : null));
+    } catch (err: any) {
+      toast(err.message || "Failed to upload profile picture", "danger");
+    } finally {
+      setUploadingPfp(false);
+      e.target.value = "";
+    }
+  }
 
   function handleLogout() {
     clearAuthSession();
@@ -239,8 +278,54 @@ export default function CustomerProfilePage() {
           </div>
 
           {/* Delivery Location & Map Editor */}
-          <Panel className="space-y-4 p-6">
+          <Panel className="space-y-5 p-6">
             <SectionHeading eyebrow="Account summary" title="Account Details" />
+
+            {/* Profile Avatar & Upload Section */}
+            <div className="flex flex-col sm:flex-row items-center gap-5 p-4 rounded-2xl bg-gradient-to-r from-amber-50/80 to-orange-50/50 border border-amber-200/60 shadow-2xs">
+              <div className="relative group shrink-0">
+                <div className="h-24 w-24 rounded-full overflow-hidden border-2 border-amber-500 shadow-md bg-slate-100 flex items-center justify-center relative">
+                  {liveProfile?.pfp_url ? (
+                    <img
+                      src={getImageUrl(liveProfile.pfp_url)}
+                      alt={liveProfile.name || user?.username || "Avatar"}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-3xl">👤</span>
+                  )}
+                  {uploadingPfp && (
+                    <div className="absolute inset-0 bg-black/60 rounded-full flex flex-col items-center justify-center text-white text-[11px] font-semibold">
+                      <span className="animate-spin text-base">⏳</span>
+                      <span>Uploading...</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex-1 text-center sm:text-left space-y-2">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">{liveProfile?.name || user?.username}</h3>
+                  <p className="text-xs text-slate-500 font-mono">@{user?.username} · {liveProfile?.email || user?.email || "No email"}</p>
+                  {liveProfile?.balance !== undefined && (
+                    <p className="text-xs font-semibold text-emerald-600 mt-0.5">Wallet Balance: ৳{Number(liveProfile.balance).toFixed(2)}</p>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-1.5 text-xs font-semibold shadow-xs transition">
+                    <span>📷</span> {uploadingPfp ? "Uploading..." : "Upload Profile Picture"}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      onChange={handlePfpUpload}
+                      disabled={uploadingPfp}
+                      className="hidden"
+                    />
+                  </label>
+                  <span className="text-[11px] text-slate-500">Max 5 MB (JPG, PNG, WebP)</span>
+                </div>
+              </div>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <span className="text-xs text-slate-500 block">Username:</span>

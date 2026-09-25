@@ -75,7 +75,7 @@ ORDER BY category ASC;
 
 --name:get_owner_foods
 SELECT F.food_id, F.restaurant_id, F.category, F.name, F.price,
-             F.discount, F.description, F.subcategory
+             F.discount, F.description, F.subcategory, F.picture_url
 FROM foods F
 WHERE F.restaurant_id = %s
     AND EXISTS (
@@ -87,8 +87,8 @@ ORDER BY F.subcategory NULLS FIRST, F.category ASC, F.name ASC;
 
 --name:insert_food
 INSERT INTO foods
-(food_id, restaurant_id, category, name, price, discount, description, subcategory)
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+(food_id, restaurant_id, category, name, price, discount, description, subcategory, picture_url)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
 
 --name:delete_food_by_owner
 DELETE FROM foods
@@ -113,3 +113,14 @@ WHERE F.food_id = %s
           SELECT 1 FROM restaurant R
           WHERE R.restaurant_id = F.restaurant_id AND R.owner_id = %s
   );
+
+--name:update_food_picture_by_owner
+UPDATE foods F
+SET picture_url = %s
+WHERE F.food_id = %s
+  AND F.restaurant_id = %s
+  AND EXISTS (
+          SELECT 1 FROM restaurant R
+          WHERE R.restaurant_id = F.restaurant_id AND R.owner_id = %s
+  );
+

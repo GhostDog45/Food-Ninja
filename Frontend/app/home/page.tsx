@@ -11,12 +11,15 @@ import { Modal } from "@/components/modal";
 import {
   apiGetUserNearbyRestaurants,
   apiGetUserCategories,
+  apiGetUserCategoriesDetail,
   apiSearchUserFoods,
   apiGetUserCart,
   apiAddToCart,
+  getImageUrl,
   type CustomerNearbyRestaurant,
   type CustomerSearchResult,
   type CartData,
+  type FoodCategory,
 } from "@/lib/backend";
 
 type SortOption = "distance" | "delivery time" | "rating" | "popularity";
@@ -82,6 +85,7 @@ export default function CustomerHomePage() {
   const [sortBy, setSortBy] = useState<SortOption>("distance");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [categories, setCategories] = useState<string[]>([]);
+  const [categoriesDetail, setCategoriesDetail] = useState<FoodCategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchResults, setSearchResults] = useState<CustomerSearchResult[]>([]);
@@ -138,8 +142,9 @@ export default function CustomerHomePage() {
     async function loadInitialData() {
       setIsLoading(true);
       try {
-        const [cats, cartRes, nearbyRes] = await Promise.all([
+        const [cats, catsDetail, cartRes, nearbyRes] = await Promise.all([
           apiGetUserCategories().catch(() => []),
+          apiGetUserCategoriesDetail().catch(() => []),
           apiGetUserCart().catch(() => ({ has_cart: false, cart: null })),
           apiGetUserNearbyRestaurants({ sort: sortBy }).catch((err) => {
             return { restaurants: [], user_location: undefined, message: err.message };
@@ -149,6 +154,7 @@ export default function CustomerHomePage() {
         if (!isMounted) return;
 
         setCategories(cats);
+        setCategoriesDetail(catsDetail);
         setCart(cartRes.cart);
         setRestaurants(sortRestaurants(nearbyRes.restaurants || [], sortBy));
         if (nearbyRes.user_location) {
@@ -413,7 +419,7 @@ export default function CustomerHomePage() {
                 )}
               </div>
 
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="flex gap-2 overflow-x-auto pb-1 items-center">
                 <button
                   type="button"
                   onClick={() => {
@@ -428,21 +434,31 @@ export default function CustomerHomePage() {
                 >
                   All Categories
                 </button>
-                {categories.map((cat) => (
+                {(categoriesDetail.length > 0
+                  ? categoriesDetail
+                  : categories.map((c) => ({ category: c, picture_url: null }))
+                ).map((catObj) => (
                   <button
-                    key={cat}
+                    key={catObj.category}
                     type="button"
                     onClick={() => {
-                      setSelectedCategory(cat);
+                      setSelectedCategory(catObj.category);
                       setCurrentPage(1);
                     }}
-                    className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-semibold capitalize transition ${
-                      selectedCategory === cat
+                    className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-semibold capitalize transition ${
+                      selectedCategory === catObj.category
                         ? "border-amber-500 bg-amber-500 text-white shadow-sm"
                         : "border-black/10 bg-white text-slate-700 hover:bg-slate-50"
                     }`}
                   >
-                    {cat}
+                    {catObj.picture_url && (
+                      <img
+                        src={getImageUrl(catObj.picture_url)}
+                        alt={catObj.category}
+                        className="h-4 w-4 rounded-full object-cover shrink-0"
+                      />
+                    )}
+                    <span>{catObj.category}</span>
                   </button>
                 ))}
               </div>
@@ -663,19 +679,27 @@ export default function CustomerHomePage() {
                         <Panel key={item.food_id} className="space-y-3 overflow-hidden p-4 flex flex-col justify-between">
                           <div className="space-y-2">
                             {/* Dish Card Header */}
-                            <div className="relative flex h-28 w-full items-center justify-center rounded-xl bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200/50">
-                              <div className="flex flex-col items-center gap-1 text-center">
-                                <span className="text-2xl">🍲</span>
-                                <span className="text-xs font-bold uppercase tracking-wider text-amber-800">
-                                  {item.category}
-                                </span>
-                              </div>
+                            <div className="relative flex h-32 w-full items-center justify-center rounded-xl bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200/50 overflow-hidden">
+                              {item.picture_url ? (
+                                <img
+                                  src={getImageUrl(item.picture_url)}
+                                  alt={item.food_name}
+                                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                                />
+                              ) : (
+                                <div className="flex flex-col items-center gap-1 text-center">
+                                  <span className="text-2xl">🍲</span>
+                                  <span className="text-xs font-bold uppercase tracking-wider text-amber-800">
+                                    {item.category}
+                                  </span>
+                                </div>
+                              )}
                               {item.discount > 0 && (
-                                <div className="absolute top-2 right-2 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                                <div className="absolute top-2 right-2 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm z-10">
                                   {item.discount}% OFF
                                 </div>
                               )}
-                              <div className="absolute top-2 left-2">
+                              <div className="absolute top-2 left-2 z-10">
                                 <Badge tone={item.restaurant_status === "open" ? "success" : "danger"}>
                                   {item.restaurant_status === "open" ? "Open" : "Closed"}
                                 </Badge>

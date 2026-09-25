@@ -191,11 +191,11 @@ WHERE restaurant_id = %s
 ORDER BY subcategory NULLS FIRST, category ASC, name ASC;
 
 --name:get_admin_user_details
-SELECT username, name, email, phone, balance, pfp, location, status, reg_date
+SELECT username, name, email, phone, balance, pfp_url AS pfp, location, status, reg_date
 FROM users WHERE username = %s;
 
 --name:get_admin_rider_details
-SELECT username, name, email, phone, vehicle, location, balance, pfp, status, reg_date
+SELECT username, name, email, phone, vehicle, location, balance, pfp_url AS pfp, status, reg_date
 FROM rider WHERE username = %s;
 
 --name:get_admin_owner_details

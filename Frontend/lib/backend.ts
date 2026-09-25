@@ -82,6 +82,18 @@ export type UpdateResponse = {
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:5000";
 
+export function getImageUrl(url?: string | null, fallback = "/placeholder-food.png"): string {
+  if (!url || typeof url !== "string" || !url.trim()) return fallback;
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
+    return url;
+  }
+  if (url.startsWith("/uploads/") || url.startsWith("uploads/")) {
+    const cleanPath = url.startsWith("/") ? url : `/${url}`;
+    return `${BACKEND_URL}${cleanPath}`;
+  }
+  return url.startsWith("/") ? url : `/${url}`;
+}
+
 // Auth token storage helpers (localStorage)
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -530,6 +542,7 @@ export type OwnerFood = {
   discount: number | string;
   description?: string;
   subcategory?: string | null;
+  picture_url?: string | null;
 };
 
 export async function apiGetFoodCategories(): Promise<string[]> {
@@ -911,6 +924,7 @@ export type CustomerFood = {
   discounted_price: number;
   description: string;
   subcategory: string;
+  picture_url?: string | null;
 };
 
 export type CustomerRestaurantDetail = CustomerNearbyRestaurant & {
@@ -934,6 +948,7 @@ export type CustomerSearchResult = {
   distance_km: number;
   restaurant_rating: number;
   people_ordered_count: number;
+  picture_url?: string | null;
 };
 
 export type CartItemData = {
@@ -946,6 +961,7 @@ export type CartItemData = {
   unit_price: number;
   quantity: number;
   item_total: number;
+  picture_url?: string | null;
 };
 
 export type CartData = {
@@ -1289,6 +1305,154 @@ export async function apiConfirmOrderPickup(orderId: string): Promise<{ success:
   if (!res.ok || !data.success) throw new Error(data.message || "Failed to confirm pickup");
   return data;
 }
+
+// ---------------------------------------------------------------------------
+// Image Uploads, Profile Details & Categories
+// ---------------------------------------------------------------------------
+
+export type FoodCategory = {
+  category: string;
+  picture_url?: string | null;
+};
+
+export async function apiGetUserCategoriesDetail(): Promise<FoodCategory[]> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/user/categories`);
+    const data = await res.json();
+    if (!res.ok || !data.success) return [];
+    if (Array.isArray(data.categories_detail)) {
+      return data.categories_detail;
+    }
+    if (Array.isArray(data.categories)) {
+      return data.categories.map((c: string) => ({ category: c, picture_url: null }));
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+export type UserProfile = {
+  username: string;
+  name: string;
+  email: string;
+  phone: string;
+  balance: number;
+  pfp_url?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  status: string;
+  reg_date?: string;
+};
+
+export async function apiGetUserProfile(): Promise<UserProfile> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/users/me/profile`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load profile");
+  return data.profile;
+}
+
+export async function apiUploadUserPfp(file: File): Promise<{ success: boolean; message: string; pfp_url: string }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error(`File size exceeds 5 MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please select a smaller image.`);
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BACKEND_URL}/users/me/pfp`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to upload profile picture");
+  return data;
+}
+
+export type RiderProfile = {
+  username: string;
+  name: string;
+  email: string;
+  phone: string;
+  vehicle: "bike" | "bicycle";
+  balance: number;
+  pfp_url?: string | null;
+  status: string;
+  reg_date?: string;
+};
+
+export async function apiGetRiderProfile(): Promise<RiderProfile> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/rider/me/profile`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load rider profile");
+  return data.profile;
+}
+
+export async function apiUploadRiderPfp(file: File): Promise<{ success: boolean; message: string; pfp_url: string }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error(`File size exceeds 5 MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please select a smaller image.`);
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BACKEND_URL}/rider/me/pfp`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to upload rider profile picture");
+  return data;
+}
+
+export async function apiUploadFoodPicture(restaurantId: string, foodId: string, file: File): Promise<{ success: boolean; message: string; picture_url: string }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error(`File size exceeds 5 MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please select a smaller image.`);
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BACKEND_URL}/owner/restaurants/${encodeURIComponent(restaurantId)}/foods/${encodeURIComponent(foodId)}/picture`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to upload food picture");
+  return data;
+}
+
 
 
 

@@ -16,6 +16,7 @@ import {
   apiUpdateCartItemQty,
   apiRemoveCartItem,
   apiDeleteUserCart,
+  getImageUrl,
   type CustomerRestaurantDetail,
   type CustomerFood,
   type CartData,
@@ -237,7 +238,7 @@ export default function RestaurantDetailsPage() {
                     </div>
                     <span className="text-sm font-bold text-slate-800">{restaurant.name}</span>
                   </div>
-                  <div className="absolute top-3 right-3 flex items-center gap-2">
+                  <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
                     <Badge tone={restaurant.status === "open" ? "success" : "danger"}>
                       {restaurant.status === "open" ? "Open" : "Closed"}
                     </Badge>
@@ -249,7 +250,7 @@ export default function RestaurantDetailsPage() {
                         : "Outside Area"}
                     </Badge>
                   </div>
-                  <div className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full border border-slate-200/90 bg-white/95 px-3 py-1 text-xs font-bold text-slate-800 shadow-sm backdrop-blur-sm">
+                  <div className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full border border-slate-200/90 bg-white/95 px-3 py-1 text-xs font-bold text-slate-800 shadow-sm backdrop-blur-sm z-10">
                     📍 {restaurant.distance_km} km from you
                   </div>
                 </div>
@@ -312,15 +313,23 @@ export default function RestaurantDetailsPage() {
                       {items.map((food) => (
                         <Panel key={food.food_id} className="space-y-3 p-4 flex flex-col justify-between">
                           <div className="space-y-2">
-                            <div className="relative flex h-24 w-full items-center justify-center rounded-xl bg-gradient-to-br from-amber-50 to-slate-100 border border-black/5">
-                              <div className="flex flex-col items-center gap-1">
-                                <span className="text-xl">🍲</span>
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                                  {food.category}
-                                </span>
-                              </div>
+                            <div className="relative flex h-28 w-full items-center justify-center rounded-xl bg-gradient-to-br from-amber-50 to-slate-100 border border-black/5 overflow-hidden">
+                              {food.picture_url ? (
+                                <img
+                                  src={getImageUrl(food.picture_url)}
+                                  alt={food.name}
+                                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                                />
+                              ) : (
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="text-xl">🍲</span>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                                    {food.category}
+                                  </span>
+                                </div>
+                              )}
                               {food.discount > 0 && (
-                                <div className="absolute top-2 right-2 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                                <div className="absolute top-2 right-2 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm z-10">
                                   {food.discount}% OFF
                                 </div>
                               )}
@@ -511,11 +520,19 @@ export default function RestaurantDetailsPage() {
             onClose={() => setSelectedFood(null)}
           >
             <div className="space-y-4 text-xs text-slate-700">
-              <div className="flex h-28 w-full items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-100 to-orange-50 border border-amber-200/60">
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-3xl">🍲</span>
-                  <span className="font-bold uppercase tracking-wider text-amber-900">{selectedFood.category}</span>
-                </div>
+              <div className="relative flex h-40 w-full items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-100 to-orange-50 border border-amber-200/60 overflow-hidden">
+                {selectedFood.picture_url ? (
+                  <img
+                    src={getImageUrl(selectedFood.picture_url)}
+                    alt={selectedFood.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-3xl">🍲</span>
+                    <span className="font-bold uppercase tracking-wider text-amber-900">{selectedFood.category}</span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">

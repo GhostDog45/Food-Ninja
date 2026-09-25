@@ -295,9 +295,10 @@ def owner_foods(restaurant_id):
                 return jsonify({"success": False, "message": "Invalid food category"}), 400
 
             food_id = f"FOOD-{uuid.uuid4()}"
-            cur.execute(load_query("owner.sql", "insert_food"), (food_id, restaurant_id, category, name.strip(), price, discount, description, normalized_subcategory))
+            picture_url = data.get("picture_url")
+            cur.execute(load_query("owner.sql", "insert_food"), (food_id, restaurant_id, category, name.strip(), price, discount, description, normalized_subcategory, picture_url))
             conn.commit()
-            return jsonify({"success": True, "message": "Food added successfully", "food_id": food_id}), 201
+            return jsonify({"success": True, "message": "Food added successfully", "food_id": food_id, "picture_url": picture_url}), 201
     except psycopg.errors.ForeignKeyViolation:
         return jsonify({"success": False, "message": "Invalid food category"}), 400
     except psycopg.Error:

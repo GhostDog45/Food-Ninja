@@ -6,7 +6,7 @@ FROM users
 WHERE username = %s;
 
 --name:get_all_food_categories
-SELECT category 
+SELECT category, picture_url 
 FROM food_category 
 ORDER BY category ASC;
 
@@ -65,7 +65,8 @@ SELECT
     F.discount,
     ROUND(F.price * (1 - COALESCE(F.discount, 0) / 100.0), 2) AS discounted_price,
     F.description,
-    F.subcategory
+    F.subcategory,
+    F.picture_url
 FROM foods F
 WHERE F.restaurant_id = %s
 ORDER BY F.category ASC, F.name ASC;
@@ -100,6 +101,7 @@ SELECT
     ROUND(F.price * (1 - COALESCE(F.discount, 0) / 100.0), 2) AS discounted_price,
     F.description,
     F.subcategory,
+    F.picture_url,
     R.restaurant_id,
     R.name AS restaurant_name,
     R.status AS restaurant_status,
@@ -115,7 +117,7 @@ WHERE ST_DWithin(R.location, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography, 
   AND R.status IN ('open', 'closed')
   AND (%s::text IS NULL OR LOWER(F.category) = LOWER(%s))
   AND (%s::text IS NULL OR LOWER(F.name) LIKE LOWER(%s) OR LOWER(F.category) LIKE LOWER(%s) OR LOWER(R.name) LIKE LOWER(%s))
-GROUP BY F.food_id, F.name, F.category, F.price, F.discount, F.description, F.subcategory, R.restaurant_id, R.name, R.status, R.location
+GROUP BY F.food_id, F.name, F.category, F.price, F.discount, F.description, F.subcategory, F.picture_url, R.restaurant_id, R.name, R.status, R.location
 ORDER BY distance_meters ASC, F.name ASC
 LIMIT 50;
 
@@ -296,6 +298,7 @@ SELECT
     F.price,
     F.discount,
     F.description,
+    F.picture_url,
     ROUND(F.price * (1 - COALESCE(F.discount, 0) / 100.0), 2) AS unit_price,
     CI.quantity,
     ROUND(ROUND(F.price * (1 - COALESCE(F.discount, 0) / 100.0), 2) * CI.quantity, 2) AS item_total
