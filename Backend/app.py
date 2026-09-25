@@ -14,6 +14,7 @@ from routes.orders import orders_bp
 from routes.owner import owner_bp
 from routes.admin import admin_bp
 from routes.rider import rider_bp
+from routes.user import user_bp
 
 
 load_dotenv()
@@ -35,6 +36,7 @@ app.register_blueprint(orders_bp)
 app.register_blueprint(owner_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(rider_bp)
+app.register_blueprint(user_bp)
 
 
 @app.route("/", methods=["GET"])

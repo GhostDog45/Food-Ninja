@@ -793,3 +793,311 @@ export async function apiSetAdminDirectoryStatus(
   if (!res.ok || !data.success) throw new Error(data.message || "Failed to update status");
   return data;
 }
+
+// ---------------------------------------------------------------------------
+// Customer User Portal Endpoints & Types
+// ---------------------------------------------------------------------------
+
+export type CustomerNearbyRestaurant = {
+  restaurant_id: string;
+  name: string;
+  latitude: number | null;
+  longitude: number | null;
+  open_time: string | null;
+  close_time: string | null;
+  status: string;
+  distance_meters: number;
+  distance_km: number;
+  rating: number;
+  review_count: number;
+  people_ordered_count: number;
+  total_orders_count: number;
+};
+
+export type CustomerFood = {
+  food_id: string;
+  restaurant_id: string;
+  category: string;
+  name: string;
+  price: number;
+  discount: number;
+  discounted_price: number;
+  description: string;
+  subcategory: string;
+};
+
+export type CustomerRestaurantDetail = CustomerNearbyRestaurant & {
+  within_5km: boolean;
+  foods: CustomerFood[];
+};
+
+export type CustomerSearchResult = {
+  food_id: string;
+  food_name: string;
+  category: string;
+  price: number;
+  discount: number;
+  discounted_price: number;
+  description: string;
+  subcategory: string;
+  restaurant_id: string;
+  restaurant_name: string;
+  restaurant_status: string;
+  distance_meters: number;
+  distance_km: number;
+  restaurant_rating: number;
+  people_ordered_count: number;
+};
+
+export type CartItemData = {
+  food_id: string;
+  name: string;
+  category: string;
+  price: number;
+  discount: number;
+  unit_price: number;
+  quantity: number;
+  item_total: number;
+};
+
+export type CartData = {
+  cart_id: string;
+  restaurant_id: string;
+  restaurant_name: string;
+  status: string;
+  items: CartItemData[];
+  subtotal: number;
+  delivery_fee: number;
+  total: number;
+};
+
+export type CustomerOrder = {
+  order_id: string;
+  status: string;
+  bill: string;
+  order_timestamp: string;
+  final_timestamp: string | null;
+  payment_method: string;
+  payment_status: string;
+  transaction_id: string;
+  restaurant_id: string;
+  restaurant_name: string;
+  latitude: number | null;
+  longitude: number | null;
+  items?: CartItemData[];
+};
+
+export async function apiGetUserNearbyRestaurants(coords?: { latitude?: number; longitude?: number }): Promise<{
+  restaurants: CustomerNearbyRestaurant[];
+  user_location?: { latitude: number; longitude: number };
+  message?: string;
+}> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const params = new URLSearchParams();
+  if (coords?.latitude !== undefined && coords?.longitude !== undefined) {
+    params.set("latitude", String(coords.latitude));
+    params.set("longitude", String(coords.longitude));
+  }
+
+  const res = await fetch(`${BACKEND_URL}/user/nearby_restaurants?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load nearby restaurants");
+  return {
+    restaurants: Array.isArray(data.restaurants) ? data.restaurants : [],
+    user_location: data.user_location,
+    message: data.message,
+  };
+}
+
+export async function apiGetUserRestaurantDetail(restaurantId: string, coords?: { latitude?: number; longitude?: number }): Promise<CustomerRestaurantDetail> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const params = new URLSearchParams();
+  if (coords?.latitude !== undefined && coords?.longitude !== undefined) {
+    params.set("latitude", String(coords.latitude));
+    params.set("longitude", String(coords.longitude));
+  }
+
+  const res = await fetch(`${BACKEND_URL}/user/restaurants/${encodeURIComponent(restaurantId)}?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load restaurant details");
+  return data.restaurant;
+}
+
+export async function apiGetUserCategories(): Promise<string[]> {
+  const res = await fetch(`${BACKEND_URL}/user/categories`);
+  const data = await res.json();
+  if (!res.ok || !data.success) return [];
+  return Array.isArray(data.categories) ? data.categories : [];
+}
+
+export async function apiSearchUserFoods(query: string, category?: string, coords?: { latitude?: number; longitude?: number }): Promise<CustomerSearchResult[]> {
+  const token = getAuthToken();
+  if (!token) return [];
+
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (category) params.set("category", category);
+  if (coords?.latitude !== undefined && coords?.longitude !== undefined) {
+    params.set("latitude", String(coords.latitude));
+    params.set("longitude", String(coords.longitude));
+  }
+
+  try {
+    const res = await fetch(`${BACKEND_URL}/user/foods/search?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) return [];
+    return Array.isArray(data.results) ? data.results : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function apiGetUserFoodDetail(foodId: string): Promise<any> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/user/foods/${encodeURIComponent(foodId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load food details");
+  return data.food;
+}
+
+export async function apiGetUserCart(): Promise<{ has_cart: boolean; cart: CartData | null }> {
+  const token = getAuthToken();
+  if (!token) return { has_cart: false, cart: null };
+
+  const res = await fetch(`${BACKEND_URL}/user/cart`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to fetch cart");
+  return { has_cart: Boolean(data.has_cart), cart: data.cart || null };
+}
+
+export async function apiAddToCart(foodId: string, quantity = 1, replace = false): Promise<{ success: boolean; message: string; conflict?: boolean; existing_restaurant?: string }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/user/cart/items`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ food_id: foodId, quantity, replace }),
+  });
+  const data = await res.json();
+  if (!res.ok && res.status !== 409) {
+    throw new Error(data.message || "Failed to add food to cart");
+  }
+  return data;
+}
+
+export async function apiUpdateCartItemQty(foodId: string, quantity: number): Promise<void> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/user/cart/items`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ food_id: foodId, quantity }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to update item quantity");
+}
+
+export async function apiRemoveCartItem(foodId: string): Promise<void> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/user/cart/items/${encodeURIComponent(foodId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to remove item from cart");
+}
+
+export async function apiDeleteUserCart(): Promise<void> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/user/cart`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to delete cart");
+}
+
+export async function apiCheckoutUserCart(payload?: {
+  payment_method?: "Cash on delivery";
+  latitude?: number;
+  longitude?: number;
+}): Promise<{
+  success: boolean;
+  message: string;
+  order_id: string;
+  status: string;
+  bill: string;
+  payment_method: string;
+  restaurant_name: string;
+}> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/user/cart/checkout`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      payment_method: "Cash on delivery",
+      ...(payload || {}),
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Checkout failed");
+  return data;
+}
+
+export async function apiGetUserOrders(): Promise<CustomerOrder[]> {
+  const token = getAuthToken();
+  if (!token) return [];
+
+  const res = await fetch(`${BACKEND_URL}/user/orders`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) return [];
+  return Array.isArray(data.orders) ? data.orders : [];
+}
+
+export async function apiGetUserOrderDetail(orderId: string): Promise<CustomerOrder> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/user/orders/${encodeURIComponent(orderId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load order");
+  return data.order;
+}
+
