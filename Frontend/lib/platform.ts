@@ -118,5 +118,6 @@ export const customerNav: NavItem[] = [
   { href: "/home", label: "Home", hint: "Feed and search" },
   { href: "/checkout", label: "Checkout", hint: "Cart review" },
   { href: "/orders/active", label: "Track order", hint: "Live delivery" },
+  { href: "/orders", label: "Order history", hint: "Past orders & reviews" },
   { href: "/profile", label: "Profile", hint: "Saved details" },
 ];

@@ -4,12 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { Badge, Panel, SectionHeading, TableFrame, cn } from "@/components/ui";
+import { Badge, Panel, SectionHeading, cn } from "@/components/ui";
 import { useToast } from "@/components/toast-provider";
 import { customerNav, ownerNav, riderNav, adminNav } from "@/lib/platform";
 import {
   getAuthUser,
-  apiGetPendingOrders,
   clearAuthSession,
   apiChangePassword,
   apiUpdateEmail,
@@ -20,20 +19,12 @@ import {
 } from "@/lib/backend";
 import { OSMLocationPicker } from "@/components/osm-location-picker";
 
-type OrderItem = {
-  order_id: string | number;
-  status: string;
-  bill: string | number;
-};
-
 export default function CustomerProfilePage() {
   const router = useRouter();
   const { toast } = useToast();
 
   const [user, setUser] = useState<{ username: string; user_type: string; email?: string } | null>(null);
   const [profileDetails, setProfileDetails] = useState<Record<string, any> | null>(null);
-  const [orders, setOrders] = useState<OrderItem[]>([]);
-  const [loadingOrders, setLoadingOrders] = useState(false);
 
   // Location state
   const [isEditingLocation, setIsEditingLocation] = useState(false);
@@ -83,19 +74,6 @@ export default function CustomerProfilePage() {
         if (details.longitude) setTempLng(Number(details.longitude));
         if (details.area) setTempArea(String(details.area));
       }
-      setLoadingOrders(true);
-      apiGetPendingOrders()
-        .then((fetchedOrders) => {
-          if (Array.isArray(fetchedOrders)) {
-            setOrders(fetchedOrders);
-          }
-        })
-        .catch(() => {
-          // Fallback gracefully if no orders or not supported
-        })
-        .finally(() => {
-          setLoadingOrders(false);
-        });
     }
   }, []);
 
@@ -239,71 +217,40 @@ export default function CustomerProfilePage() {
     >
       <div className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
         {/* Left column: Active & Recent orders */}
+        {/* Left column: Account & Location */}
         <div className="space-y-6">
-          <Panel className="space-y-5 p-6">
-            <div className="flex items-center justify-between">
-              <SectionHeading eyebrow="Order history" title="Active & Recent orders" />
-              {loadingOrders && <span className="text-xs text-amber-400">Syncing with backend...</span>}
-            </div>
-            {orders.length === 0 ? (
-              <div className="rounded-2xl border border-white/5 bg-white/5 p-8 text-center">
-                <p className="text-sm font-medium text-slate-300">No active or past orders yet</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  When you browse menus and place an order, your live receipts and statuses will appear here.
+          {/* Quick link banner to Order History */}
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 flex items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🥡</span>
+              <div>
+                <h4 className="text-xs font-bold text-amber-950">Looking for your orders & receipts?</h4>
+                <p className="text-[11px] text-amber-800">
+                  Track live deliveries and leave restaurant & courier reviews in Order History.
                 </p>
-                <Link
-                  href="/home"
-                  className="mt-4 inline-flex items-center rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-amber-600"
-                >
-                  Browse Restaurants →
-                </Link>
               </div>
-            ) : (
-              <TableFrame>
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-white/5 text-slate-300">
-                    <tr>
-                      <th className="px-4 py-3 font-medium">Order ID</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                      <th className="px-4 py-3 font-medium">Total Bill</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orders.map((order) => (
-                      <tr key={order.order_id} className="border-t border-white/10">
-                        <td className="px-4 py-3 font-medium text-white">{order.order_id}</td>
-                        <td className="px-4 py-3 text-slate-300">
-                          <span className="inline-block rounded-full bg-white/10 px-2 py-0.5 text-xs text-amber-300">
-                            {order.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-300">
-                          {typeof order.bill === "number" ? `৳${order.bill}` : order.bill}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </TableFrame>
-            )}
-          </Panel>
+            </div>
+            <Link
+              href="/orders"
+              className="shrink-0 rounded-full bg-amber-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-amber-600 transition"
+            >
+              Order History →
+            </Link>
+          </div>
 
           {/* Delivery Location & Map Editor */}
           <Panel className="space-y-4 p-6">
-            <SectionHeading eyebrow="Account summary" title="Session information" />
+            <SectionHeading eyebrow="Account summary" title="Account Details" />
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <span className="text-xs text-slate-400 block">Permanent Handle (Primary Key):</span>
-                <span className="text-sm font-semibold text-white font-mono flex items-center gap-2">
+                <span className="text-xs text-slate-500 block">Username:</span>
+                <span className="text-sm font-semibold text-slate-900 font-mono">
                   @{user?.username || "Not logged in"}
-                  <span className="rounded-md bg-amber-500/20 px-2 py-0.5 text-[10px] font-sans font-medium text-amber-300 border border-amber-500/30">
-                    Permanent
-                  </span>
                 </span>
               </div>
               <div>
-                <span className="text-xs text-slate-400 block">Account Role:</span>
-                <span className="text-sm font-semibold capitalize text-amber-300">{user?.user_type || "Guest"}</span>
+                <span className="text-xs text-slate-500 block">Account Role:</span>
+                <span className="text-sm font-semibold capitalize text-amber-600">{user?.user_type || "User"}</span>
               </div>
             </div>
 
@@ -315,7 +262,7 @@ export default function CustomerProfilePage() {
                   <div>
                     <span className="text-sm font-bold text-slate-900 block">{currentArea}</span>
                     <span className="text-[10px] font-mono text-slate-500">
-                      {hasCustomLocation ? `${currentLat}° N, ${currentLng}° E` : "Coordinates not calibrated — click Edit Location"}
+                      {hasCustomLocation ? `${currentLat}° N, ${currentLng}° E` : "Location not calibrated — click Edit Location"}
                     </span>
                   </div>
                 </div>
@@ -328,7 +275,7 @@ export default function CustomerProfilePage() {
                 </button>
               </div>
               <p className="text-xs text-slate-500">
-                Couriers use these PostGIS coordinates to compute delivery distance, ETA, and optimal routing.
+                Couriers use your delivery location to compute distance, delivery time, and optimal routing.
               </p>
             </div>
 

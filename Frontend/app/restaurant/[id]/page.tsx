@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { Badge, Panel, SectionHeading } from "@/components/ui";
+import { Badge, Panel, SectionHeading, cn } from "@/components/ui";
 import { customerNav } from "@/lib/platform";
 import { CustomerAccessGuard } from "@/components/customer-access-guard";
 import { useToast } from "@/components/toast-provider";
@@ -30,6 +30,7 @@ export default function RestaurantDetailsPage() {
   const [restaurant, setRestaurant] = useState<CustomerRestaurantDetail | null>(null);
   const [cart, setCart] = useState<CartData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [accessError, setAccessError] = useState<string | null>(null);
   const [selectedFood, setSelectedFood] = useState<CustomerFood | null>(null);
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [pendingAddFood, setPendingAddFood] = useState<{ foodId: string; quantity: number } | null>(null);
@@ -38,14 +39,27 @@ export default function RestaurantDetailsPage() {
 
   // Load restaurant & cart
   async function refreshData() {
+    setIsLoading(true);
+    setAccessError(null);
     try {
       const [rDetail, cartRes] = await Promise.all([
         apiGetUserRestaurantDetail(restaurantId),
         apiGetUserCart().catch(() => ({ has_cart: false, cart: null })),
       ]);
+
+      // Direct URL Access Control: Evaluate restaurant operating status
+      if (!rDetail || (rDetail.status !== "open" && rDetail.status !== "closed")) {
+        setAccessError("Access restricted. This restaurant is currently unauthorized or unavailable.");
+        return;
+      }
+
       setRestaurant(rDetail);
       setCart(cartRes.cart);
+      if (rDetail && rDetail.status === "closed") {
+        toast("This restaurant is currently closed off and not accepting orders.", "danger");
+      }
     } catch (err: any) {
+      setAccessError(err.message || "Access restricted. This restaurant is unavailable or does not exist.");
       toast(err.message || "Failed to load restaurant details", "danger");
     } finally {
       setIsLoading(false);
@@ -59,6 +73,10 @@ export default function RestaurantDetailsPage() {
   }, [restaurantId]);
 
   async function handleAddToCart(foodId: string, quantity = 1, replace = false) {
+    if (restaurant?.status === "closed") {
+      toast("This restaurant is currently closed off and not accepting orders.", "danger");
+      return;
+    }
     try {
       const res = await apiAddToCart(foodId, quantity, replace);
       if (res.conflict) {
@@ -77,6 +95,12 @@ export default function RestaurantDetailsPage() {
 
   async function handleConfirmReplaceCart() {
     if (!pendingAddFood) return;
+    if (restaurant?.status === "closed") {
+      toast("This restaurant is closed off. You cannot initiate a new order.", "danger");
+      setConflictModalOpen(false);
+      setPendingAddFood(null);
+      return;
+    }
     try {
       await handleAddToCart(pendingAddFood.foodId, pendingAddFood.quantity, true);
       setConflictModalOpen(false);
@@ -139,30 +163,41 @@ export default function RestaurantDetailsPage() {
         subtitle="Explore menu dishes, view ratings, and add items to your cart."
         nav={customerNav}
         actions={
-          <Link
-            href="/checkout"
-            className="flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-600"
-          >
-            <span>🛒 Checkout</span>
-            {cart && cart.items.length > 0 && (
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-bold text-amber-700">
-                {cart.items.reduce((s, i) => s + i.quantity, 0)}
-              </span>
-            )}
-          </Link>
+          restaurant?.status === "closed" && cart && cart.restaurant_name === restaurant.name ? (
+            <div className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-500 cursor-not-allowed">
+              <span>🔒 Orders Closed</span>
+            </div>
+          ) : (
+            <Link
+              href="/checkout"
+              className="flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-600"
+            >
+              <span>🛒 Checkout</span>
+              {cart && cart.items.length > 0 && (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-bold text-amber-700">
+                  {cart.items.reduce((s, i) => s + i.quantity, 0)}
+                </span>
+              )}
+            </Link>
+          )
         }
       >
         {isLoading ? (
           <Panel className="p-12 text-center text-sm text-slate-500">
-            Loading restaurant details and dishes...
+            Evaluating restaurant operating status and verifying access...
           </Panel>
-        ) : !restaurant ? (
-          <Panel className="p-12 text-center space-y-4">
-            <h2 className="text-xl font-bold text-slate-900">Restaurant Not Found</h2>
-            <p className="text-xs text-slate-500">The requested restaurant is unavailable or does not exist.</p>
+        ) : accessError || !restaurant ? (
+          <Panel className="p-12 text-center space-y-4 max-w-lg mx-auto">
+            <div className="flex h-14 w-14 mx-auto items-center justify-center rounded-full bg-rose-100 text-2xl text-rose-600">
+              🚫
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Access Restricted</h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {accessError || "The requested restaurant is unavailable, restricted, or does not exist."}
+            </p>
             <button
               onClick={() => router.push("/home")}
-              className="rounded-full bg-amber-500 px-5 py-2 text-xs font-semibold text-white hover:bg-amber-600"
+              className="rounded-full bg-amber-500 px-5 py-2 text-xs font-semibold text-white hover:bg-amber-600 transition"
             >
               ← Back to Nearby Restaurants
             </button>
@@ -171,6 +206,28 @@ export default function RestaurantDetailsPage() {
           <div className="grid gap-6 xl:grid-cols-[1.25fr_.75fr]">
             {/* Left Column: Restaurant Info & Menu Categories */}
             <div className="space-y-6">
+              {/* Closed Warning Banner */}
+              {restaurant.status === "closed" && (
+                <div className="rounded-2xl border border-rose-300 bg-rose-50/95 p-4 sm:p-5 text-rose-900 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-100 text-lg">
+                      🔒
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-rose-950">This restaurant is currently closed off</h4>
+                      <p className="text-xs text-rose-800 mt-0.5">
+                        {restaurant.name} is not accepting new orders at this time. You can still view dishes and prices below.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="sm:shrink-0">
+                    <span className="inline-flex items-center rounded-full bg-rose-200/80 px-3 py-1 text-xs font-bold text-rose-900">
+                      Orders Closed
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Restaurant Header Card */}
               <Panel className="space-y-5 p-6 overflow-hidden">
                 <div className="relative flex h-36 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 border border-amber-200/40">
@@ -181,14 +238,18 @@ export default function RestaurantDetailsPage() {
                     <span className="text-sm font-bold text-slate-800">{restaurant.name}</span>
                   </div>
                   <div className="absolute top-3 right-3 flex items-center gap-2">
-                    <Badge tone={restaurant.status === "open" ? "success" : "neutral"}>
-                      {restaurant.status === "open" ? "Open" : restaurant.status}
+                    <Badge tone={restaurant.status === "open" ? "success" : "danger"}>
+                      {restaurant.status === "open" ? "Open" : "Closed"}
                     </Badge>
-                    <Badge tone={restaurant.within_5km ? "success" : "neutral"}>
-                      {restaurant.within_5km ? "Delivery Available" : "Outside Area"}
+                    <Badge tone={restaurant.status === "open" && restaurant.within_5km ? "success" : "neutral"}>
+                      {restaurant.status === "closed"
+                        ? "Orders Closed"
+                        : restaurant.within_5km
+                        ? "Delivery Available"
+                        : "Outside Area"}
                     </Badge>
                   </div>
-                  <div className="absolute bottom-3 left-3 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
+                  <div className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full border border-slate-200/90 bg-white/95 px-3 py-1 text-xs font-bold text-slate-800 shadow-sm backdrop-blur-sm">
                     📍 {restaurant.distance_km} km from you
                   </div>
                 </div>
@@ -293,13 +354,24 @@ export default function RestaurantDetailsPage() {
                               View Details
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={() => handleAddToCart(food.food_id, 1)}
-                              className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-600"
-                            >
-                              <span>+ Add</span>
-                            </button>
+                            {restaurant.status === "closed" ? (
+                              <button
+                                type="button"
+                                disabled
+                                className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 cursor-not-allowed"
+                                title="This restaurant is currently closed off"
+                              >
+                                <span>🔒 Closed</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleAddToCart(food.food_id, 1)}
+                                className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-600"
+                              >
+                                <span>+ Add</span>
+                              </button>
+                            )}
                           </div>
                         </Panel>
                       ))}
@@ -402,12 +474,27 @@ export default function RestaurantDetailsPage() {
                       </div>
                     </div>
 
-                    <Link
-                      href="/checkout"
-                      className="mt-2 block w-full rounded-full bg-amber-500 px-4 py-2.5 text-center text-xs font-semibold text-white shadow-md shadow-amber-500/20 transition hover:bg-amber-600"
-                    >
-                      Proceed to Checkout →
-                    </Link>
+                    {restaurant.status === "closed" && cart.restaurant_name === restaurant.name ? (
+                      <div className="space-y-1.5">
+                        <button
+                          type="button"
+                          disabled
+                          className="mt-2 block w-full rounded-full bg-slate-200 px-4 py-2.5 text-center text-xs font-semibold text-slate-500 cursor-not-allowed"
+                        >
+                          🔒 Checkout Disabled (Closed)
+                        </button>
+                        <p className="text-[11px] text-center text-rose-600 font-medium">
+                          This restaurant is currently closed off and not accepting orders.
+                        </p>
+                      </div>
+                    ) : (
+                      <Link
+                        href="/checkout"
+                        className="mt-2 block w-full rounded-full bg-amber-500 px-4 py-2.5 text-center text-xs font-semibold text-white shadow-md shadow-amber-500/20 transition hover:bg-amber-600"
+                      >
+                        Proceed to Checkout →
+                      </Link>
+                    )}
                   </div>
                 )}
               </Panel>
@@ -473,13 +560,20 @@ export default function RestaurantDetailsPage() {
                 </button>
                 <button
                   type="button"
+                  disabled={restaurant?.status === "closed"}
                   onClick={() => {
+                    if (restaurant?.status === "closed") return;
                     handleAddToCart(selectedFood.food_id, 1);
                     setSelectedFood(null);
                   }}
-                  className="rounded-full bg-amber-500 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-amber-600"
+                  className={cn(
+                    "rounded-full px-5 py-2 text-xs font-semibold transition",
+                    restaurant?.status === "closed"
+                      ? "bg-slate-200 text-slate-500 cursor-not-allowed"
+                      : "bg-amber-500 text-white shadow-sm hover:bg-amber-600"
+                  )}
                 >
-                  Add to Cart
+                  {restaurant?.status === "closed" ? "🔒 Restaurant Closed" : "Add to Cart"}
                 </button>
               </div>
             </div>

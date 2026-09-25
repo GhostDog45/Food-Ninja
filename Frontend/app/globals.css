@@ -93,7 +93,11 @@ body {
 .light-app .bg-amber-600,
 .light-app .text-primary-foreground,
 .light-app [class*="bg-amber-500"],
-.light-app [class*="bg-amber-600"] {
+.light-app [class*="bg-amber-600"],
+.light-app .bg-black,
+.light-app [class*="bg-black"],
+.light-app .bg-slate-900,
+.light-app [class*="bg-slate-900"] {
   color: #ffffff !important;
 }
 

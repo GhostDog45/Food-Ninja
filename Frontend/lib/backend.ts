@@ -808,6 +808,7 @@ export type CustomerNearbyRestaurant = {
   status: string;
   distance_meters: number;
   distance_km: number;
+  delivery_time_mins?: number;
   rating: number;
   review_count: number;
   people_ordered_count: number;
@@ -853,6 +854,7 @@ export type CartItemData = {
   food_id: string;
   name: string;
   category: string;
+  description?: string;
   price: number;
   discount: number;
   unit_price: number;
@@ -864,6 +866,7 @@ export type CartData = {
   cart_id: string;
   restaurant_id: string;
   restaurant_name: string;
+  restaurant_status?: string;
   status: string;
   items: CartItemData[];
   subtotal: number;
@@ -871,10 +874,26 @@ export type CartData = {
   total: number;
 };
 
+export type DeliveryEstimate = {
+  estimated_delivery_mins: number;
+  delivery_time_range: string;
+  estimated_arrival_time: string;
+  distance_km: number;
+  distance_meters: number;
+  vehicle: "bike" | "bicycle";
+  vehicle_label: string;
+  traffic_condition: string;
+  traffic_jam_detected: boolean;
+  traffic_delay_mins: number;
+  kitchen_prep_mins: number;
+  transit_mins: number;
+};
+
 export type CustomerOrder = {
   order_id: string;
   status: string;
   bill: string;
+  total_amount?: string;
   order_timestamp: string;
   final_timestamp: string | null;
   payment_method: string;
@@ -884,10 +903,28 @@ export type CustomerOrder = {
   restaurant_name: string;
   latitude: number | null;
   longitude: number | null;
+  distance_meters?: number;
+  distance_km?: number;
+  rider_name?: string | null;
+  rider_phone?: string | null;
+  rider_vehicle?: "bike" | "bicycle" | null;
+  rider_username?: string | null;
+  delivery_estimate?: DeliveryEstimate;
   items?: CartItemData[];
+  review?: {
+    rider_rating?: number | null;
+    rider_review?: string | null;
+    restaurant_rating?: number | null;
+    restaurant_review?: string | null;
+    timestamp?: string | null;
+  } | null;
 };
 
-export async function apiGetUserNearbyRestaurants(coords?: { latitude?: number; longitude?: number }): Promise<{
+export async function apiGetUserNearbyRestaurants(params?: {
+  latitude?: number;
+  longitude?: number;
+  sort?: string;
+}): Promise<{
   restaurants: CustomerNearbyRestaurant[];
   user_location?: { latitude: number; longitude: number };
   message?: string;
@@ -895,13 +932,16 @@ export async function apiGetUserNearbyRestaurants(coords?: { latitude?: number; 
   const token = getAuthToken();
   if (!token) throw new Error("Authentication required. Please log in.");
 
-  const params = new URLSearchParams();
-  if (coords?.latitude !== undefined && coords?.longitude !== undefined) {
-    params.set("latitude", String(coords.latitude));
-    params.set("longitude", String(coords.longitude));
+  const queryParams = new URLSearchParams();
+  if (params?.latitude !== undefined && params?.longitude !== undefined) {
+    queryParams.set("latitude", String(params.latitude));
+    queryParams.set("longitude", String(params.longitude));
+  }
+  if (params?.sort) {
+    queryParams.set("sort", params.sort);
   }
 
-  const res = await fetch(`${BACKEND_URL}/user/nearby_restaurants?${params.toString()}`, {
+  const res = await fetch(`${BACKEND_URL}/user/nearby_restaurants?${queryParams.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json();
@@ -1049,6 +1089,8 @@ export async function apiCheckoutUserCart(payload?: {
   payment_method?: "Cash on delivery";
   latitude?: number;
   longitude?: number;
+  food_preparing_notes?: string;
+  delivery_notes?: string;
 }): Promise<{
   success: boolean;
   message: string;
@@ -1057,6 +1099,12 @@ export async function apiCheckoutUserCart(payload?: {
   bill: string;
   payment_method: string;
   restaurant_name: string;
+  delivery_estimate?: DeliveryEstimate;
+  rider?: {
+    name: string;
+    vehicle: "bike" | "bicycle";
+    phone?: string | null;
+  } | null;
 }> {
   const token = getAuthToken();
   if (!token) throw new Error("Authentication required. Please log in.");
@@ -1100,4 +1148,61 @@ export async function apiGetUserOrderDetail(orderId: string): Promise<CustomerOr
   if (!res.ok || !data.success) throw new Error(data.message || "Failed to load order");
   return data.order;
 }
+
+export async function apiSubmitOrderReview(
+  orderId: string,
+  payload: {
+    restaurant_rating: number;
+    restaurant_review?: string;
+    rider_rating?: number;
+    rider_review?: string;
+  }
+): Promise<{ success: boolean; message: string; review: any }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/user/orders/${encodeURIComponent(orderId)}/review`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to submit review");
+  return data;
+}
+
+export async function apiCompleteOrder(orderId: string): Promise<{ success: boolean; message: string }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/user/orders/${encodeURIComponent(orderId)}/complete`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to mark order as delivered");
+  return data;
+}
+
+export async function apiConfirmOrderPickup(orderId: string): Promise<{ success: boolean; message: string; status: string; rider_username?: string }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/user/orders/${encodeURIComponent(orderId)}/pickup`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to confirm pickup");
+  return data;
+}
+
+
 

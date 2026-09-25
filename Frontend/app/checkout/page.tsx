@@ -13,6 +13,7 @@ import {
   apiCheckoutUserCart,
   apiUpdateCartItemQty,
   apiRemoveCartItem,
+  apiGetUserRestaurantDetail,
   getAuthUser,
   getOnboardingDetails,
   type CartData,
@@ -25,7 +26,8 @@ export default function CheckoutPage() {
   const { toast } = useToast();
 
   const [open, setOpen] = useState(false);
-  const [address, setAddress] = useState("");
+  const [savedArea, setSavedArea] = useState("");
+  const [foodPreparingNotes, setFoodPreparingNotes] = useState("");
   const [deliveryNotes, setDeliveryNotes] = useState("");
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [isDeletingCart, setIsDeletingCart] = useState(false);
@@ -51,7 +53,7 @@ export default function CheckoutPage() {
     if (user) {
       const details = getOnboardingDetails(user.username);
       if (details?.area) {
-        setAddress(String(details.area));
+        setSavedArea(String(details.area));
       }
     }
     fetchCartData();
@@ -96,19 +98,42 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!address.trim()) {
-      toast("Please enter your delivery address.", "warning");
+    setIsPlacingOrder(true);
+
+    // Final Stage Client-Side Check: Dynamically re-verify restaurant operating status
+    try {
+      const freshRes = await apiGetUserRestaurantDetail(cart.restaurant_id);
+      if (freshRes.status !== "open") {
+        toast(
+          `'${cart.restaurant_name}' has closed since you added items to your cart. Your order cannot be placed.`,
+          "danger"
+        );
+        setCart((prev) => (prev ? { ...prev, restaurant_status: "closed" } : null));
+        setOpen(false);
+        setIsPlacingOrder(false);
+        return;
+      }
+    } catch (err: any) {
+      toast(
+        err.message || `'${cart.restaurant_name}' is currently unavailable. Order cannot be placed.`,
+        "danger"
+      );
+      setOpen(false);
+      setIsPlacingOrder(false);
       return;
     }
-
-    setIsPlacingOrder(true);
 
     try {
       const res = await apiCheckoutUserCart({
         payment_method: "Cash on delivery",
+        food_preparing_notes: foodPreparingNotes.trim() || undefined,
+        delivery_notes: deliveryNotes.trim() || undefined,
       });
 
-      toast("Order placed successfully!", "success");
+      const etaNotice = res.delivery_estimate?.delivery_time_range
+        ? ` Est. delivery: ${res.delivery_estimate.delivery_time_range}`
+        : "";
+      toast(`Order placed successfully!${etaNotice}`, "success");
       setOpen(false);
 
       setTimeout(() => {
@@ -130,12 +155,37 @@ export default function CheckoutPage() {
       <AppShell
         role="Customer portal"
         title="Checkout"
-        subtitle="Review your order items, confirm destination address, and pay via Cash on Delivery."
+        subtitle="Review your order items, provide cooking and delivery instructions, and confirm your order."
         nav={customerNav}
         actions={
           <Badge tone="primary">Secure Checkout</Badge>
         }
       >
+        {cart?.restaurant_status === "closed" && (
+          <div className="mb-6 rounded-2xl border border-rose-300 bg-rose-50/95 p-4 sm:p-5 text-rose-900 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-100 text-lg">
+                🔒
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-rose-950">Restaurant is Currently Closed Off</h4>
+                <p className="text-xs text-rose-800 mt-0.5">
+                  <strong>{cart.restaurant_name}</strong> is currently closed and not accepting orders. You cannot place this order until the restaurant reopens.
+                </p>
+              </div>
+            </div>
+            <div className="sm:shrink-0">
+              <button
+                type="button"
+                onClick={handleDeleteCart}
+                className="rounded-full bg-rose-200 px-3.5 py-1.5 text-xs font-bold text-rose-900 hover:bg-rose-300 transition"
+              >
+                Clear Cart
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
           {/* Left Column: Cart Review */}
           <Panel className="space-y-5 p-6">
@@ -241,27 +291,43 @@ export default function CheckoutPage() {
             )}
           </Panel>
 
-          {/* Right Column: Address & Payment */}
+          {/* Right Column: Instructions & Payment */}
           <div className="space-y-6">
             <Panel className="space-y-4 p-6">
-              <SectionHeading eyebrow="Delivery" title="Delivery Address & Instructions" />
+              <div className="flex items-center justify-between">
+                <SectionHeading eyebrow="Preferences" title="Order Instructions" />
+                <Badge tone="success">Saved Location</Badge>
+              </div>
+
+              <div className="rounded-2xl border border-black/5 bg-slate-50 p-3.5 text-xs text-slate-700 space-y-1">
+                <div className="flex items-center gap-2 font-semibold text-slate-900">
+                  <span>📍</span>
+                  <span>Delivery Destination</span>
+                </div>
+                <p className="text-slate-600 pl-6">
+                  {savedArea ? `${savedArea}, Dhaka` : "Using your saved account GPS location"}
+                </p>
+              </div>
+
               <label className="space-y-1.5 text-xs font-semibold text-slate-700 block">
-                <span>Street Address / Area in Dhaka *</span>
-                <input
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Enter house, road, area, Dhaka (e.g. Dhanmondi, Gulshan, Mirpur)"
-                  className="w-full rounded-2xl border border-black/10 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20"
-                  required
+                <span>Food Preparing Instructions (Optional)</span>
+                <textarea
+                  value={foodPreparingNotes}
+                  onChange={(e) => setFoodPreparingNotes(e.target.value)}
+                  placeholder="e.g. Less spicy, no onions, extra sauce, well cooked..."
+                  rows={2}
+                  className="w-full rounded-2xl border border-black/10 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20 resize-none"
                 />
               </label>
+
               <label className="space-y-1.5 text-xs font-semibold text-slate-700 block">
                 <span>Delivery Instructions (Optional)</span>
                 <textarea
                   value={deliveryNotes}
                   onChange={(e) => setDeliveryNotes(e.target.value)}
-                  placeholder="e.g. Leave at apartment reception, call upon arrival..."
-                  className="min-h-20 w-full rounded-2xl border border-black/10 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20 resize-none"
+                  placeholder="e.g. Leave at apartment reception, ring bell twice, call upon arrival..."
+                  rows={2}
+                  className="w-full rounded-2xl border border-black/10 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20 resize-none"
                 />
               </label>
             </Panel>
@@ -294,10 +360,10 @@ export default function CheckoutPage() {
               <button
                 type="button"
                 onClick={() => setOpen(true)}
-                disabled={items.length === 0}
-                className="w-full rounded-full bg-amber-500 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-amber-500/25 transition hover:bg-amber-600 disabled:opacity-40"
+                disabled={items.length === 0 || cart?.restaurant_status === "closed"}
+                className="w-full rounded-full bg-amber-500 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-amber-500/25 transition hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Place Order (৳{totalBill})
+                {cart?.restaurant_status === "closed" ? "🔒 Restaurant Closed" : `Place Order (৳${totalBill})`}
               </button>
             </Panel>
           </div>
@@ -319,9 +385,25 @@ export default function CheckoutPage() {
               <div className="flex justify-between">
                 <span className="text-slate-500">Destination:</span>
                 <span className="font-semibold text-slate-900 text-right max-w-[60%] truncate">
-                  {address || "Not specified"}
+                  {savedArea ? `${savedArea}, Dhaka` : "Saved Account Location"}
                 </span>
               </div>
+              {foodPreparingNotes.trim() && (
+                <div className="flex justify-between border-t border-black/5 pt-1.5">
+                  <span className="text-slate-500">Food Prep:</span>
+                  <span className="font-medium text-slate-900 text-right max-w-[60%] truncate">
+                    {foodPreparingNotes.trim()}
+                  </span>
+                </div>
+              )}
+              {deliveryNotes.trim() && (
+                <div className="flex justify-between border-t border-black/5 pt-1.5">
+                  <span className="text-slate-500">Delivery Note:</span>
+                  <span className="font-medium text-slate-900 text-right max-w-[60%] truncate">
+                    {deliveryNotes.trim()}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-500">Payment:</span>
                 <span className="font-semibold text-slate-900">Cash on Delivery</span>

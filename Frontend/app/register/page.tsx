@@ -151,7 +151,7 @@ function RegisterContent() {
             Join Food Ninja
           </h1>
           <p className="text-sm leading-6 text-slate-600">
-            Select your account type below and provide your registration details. Your account is verified and stored in our database.
+            Select your account type below and provide your registration details to get started.
           </p>
         </div>
 

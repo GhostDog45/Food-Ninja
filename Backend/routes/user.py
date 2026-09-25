@@ -1,7 +1,10 @@
 import uuid
+import re
+from datetime import datetime
 from flask import Blueprint, request, jsonify
 from db import get_connection, load_query
 import auth
+from utils import calculate_order_delivery_time
 
 user_bp = Blueprint("user", __name__)
 
@@ -56,6 +59,7 @@ def get_categories():
 # 2. Nearby Restaurants (within 5km)
 # ---------------------------------------------------------------------------
 @user_bp.route("/user/nearby_restaurants", methods=["GET"])
+@user_bp.route("/user/restaurants/nearby", methods=["GET"])
 def get_nearby_restaurants():
     payload, err = _get_authenticated_user()
     if err:
@@ -84,6 +88,7 @@ def get_nearby_restaurants():
                 restaurants = []
                 for r in rows:
                     dist_m = float(r.get("distance_meters") or 0.0)
+                    r_status = (r.get("status") or "closed").strip().lower()
                     restaurants.append({
                         "restaurant_id": r["restaurant_id"],
                         "name": r["name"],
@@ -91,14 +96,26 @@ def get_nearby_restaurants():
                         "longitude": float(r["longitude"]) if r.get("longitude") is not None else None,
                         "open_time": str(r["open_time"]) if r.get("open_time") else None,
                         "close_time": str(r["close_time"]) if r.get("close_time") else None,
-                        "status": r.get("status") or "open",
+                        "status": r_status,
                         "distance_meters": dist_m,
                         "distance_km": round(dist_m / 1000.0, 2),
+                        "delivery_time_mins": int(15 + round(dist_m / 200)),
                         "rating": float(r.get("avg_rating") or 0.0),
                         "review_count": int(r.get("review_count") or 0),
                         "people_ordered_count": int(r.get("people_ordered_count") or 0),
                         "total_orders_count": int(r.get("total_orders_count") or 0)
                     })
+
+                sort_by = (request.args.get("sort") or "distance").strip().lower()
+                # Prioritize open restaurants first, followed by closed restaurants
+                if sort_by == "rating":
+                    restaurants.sort(key=lambda x: (0 if x["status"] == "open" else 1, -x["rating"], -x["review_count"]))
+                elif sort_by in ("popularity", "popular"):
+                    restaurants.sort(key=lambda x: (0 if x["status"] == "open" else 1, -x["people_ordered_count"], -x["total_orders_count"]))
+                elif sort_by in ("delivery_time", "delivery time", "delivery"):
+                    restaurants.sort(key=lambda x: (0 if x["status"] == "open" else 1, x["delivery_time_mins"], x["distance_meters"]))
+                else:
+                    restaurants.sort(key=lambda x: (0 if x["status"] == "open" else 1, x["distance_meters"]))
 
                 return jsonify({
                     "success": True,
@@ -136,7 +153,15 @@ def get_restaurant_detail(restaurant_id):
                 restaurant = cur.fetchone()
 
                 if not restaurant:
-                    return jsonify({"success": False, "message": "Restaurant not found"}), 404
+                    # Check if restaurant exists with an unauthorized status (banned/pending)
+                    cur.execute("SELECT status FROM restaurant WHERE restaurant_id = %s", (restaurant_id,))
+                    chk = cur.fetchone()
+                    if chk and chk.get("status") in ("banned", "pending"):
+                        return jsonify({
+                            "success": False,
+                            "message": f"Access restricted. This restaurant is currently {chk.get('status')} and cannot be accessed."
+                        }), 403
+                    return jsonify({"success": False, "message": "Restaurant not found or does not exist."}), 404
 
                 dist_m = float(restaurant.get("distance_meters") or 0.0)
                 is_within_range = dist_m <= 5000.0 if (user_lon is not None and user_lat is not None) else True
@@ -170,7 +195,7 @@ def get_restaurant_detail(restaurant_id):
                     "longitude": float(restaurant["longitude"]) if restaurant.get("longitude") is not None else None,
                     "open_time": str(restaurant["open_time"]) if restaurant.get("open_time") else None,
                     "close_time": str(restaurant["close_time"]) if restaurant.get("close_time") else None,
-                    "status": restaurant.get("status") or "open",
+                    "status": (restaurant.get("status") or "closed").strip().lower(),
                     "distance_meters": dist_m,
                     "distance_km": round(dist_m / 1000.0, 2),
                     "within_5km": is_within_range,
@@ -223,7 +248,7 @@ def search_foods():
                         user_lon, user_lat,
                         user_lon, user_lat,
                         cat_param, cat_param,
-                        like_pattern, like_pattern, like_pattern
+                        like_pattern, like_pattern, like_pattern, like_pattern
                     )
                 )
                 rows = cur.fetchall()
@@ -370,6 +395,7 @@ def get_cart():
                         "cart_id": cart_id,
                         "restaurant_id": cart_row["restaurant_id"],
                         "restaurant_name": cart_row["restaurant_name"],
+                        "restaurant_status": (cart_row.get("restaurant_status") or "open").strip().lower(),
                         "status": cart_row["status"],
                         "items": items,
                         "subtotal": round(subtotal, 2),
@@ -407,7 +433,16 @@ def add_to_cart():
 
                 food_restaurant_id = food["restaurant_id"]
 
-                # 2. Check user's current pending cart
+                # 2. Verify restaurant is open
+                cur.execute("SELECT status, name FROM restaurant WHERE restaurant_id = %s", (food_restaurant_id,))
+                r_row = cur.fetchone()
+                if r_row and (r_row.get("status") or "").strip().lower() == "closed":
+                    return jsonify({
+                        "success": False,
+                        "message": f"'{r_row['name']}' is currently closed off and not accepting orders."
+                    }), 400
+
+                # 3. Check user's current pending cart
                 cur.execute(load_query("user.sql", "get_user_active_cart"), (username,))
                 active_cart = cur.fetchone()
 
@@ -565,47 +600,125 @@ def checkout_cart():
 
                 cart_id = active_cart["cart_id"]
 
+                # Final stage server-side re-verification: Check restaurant operating status
+                cur.execute("SELECT status, name FROM restaurant WHERE restaurant_id = %s", (active_cart["restaurant_id"],))
+                r_status_row = cur.fetchone()
+                if not r_status_row:
+                    return jsonify({
+                        "success": False,
+                        "message": "Restaurant no longer exists or is unavailable."
+                    }), 404
+
+                curr_status = (r_status_row.get("status") or "closed").strip().lower()
+                if curr_status != "open":
+                    return jsonify({
+                        "success": False,
+                        "message": f"'{active_cart['restaurant_name']}' has closed since you added items to your cart. Orders cannot be processed while the restaurant is {curr_status}."
+                    }), 400
+
                 # 2. Get items and calculate bill
                 cur.execute(load_query("user.sql", "get_cart_items"), (cart_id,))
                 items = cur.fetchall()
                 if not items:
                     return jsonify({"success": False, "message": "Cart is empty"}), 400
 
+                raw_total = sum(float(it["price"]) * int(it["quantity"]) for it in items)
                 subtotal = sum(float(it["item_total"]) for it in items)
+                discount_amount = max(0.0, round(raw_total - subtotal, 2))
                 delivery_fee = 50.0
                 total_bill = round(subtotal + delivery_fee, 2)
-                bill_str = f"৳{total_bill:.2f}"
 
-                # 3. Create order with status 'delivering' (Requirement 7)
+                def _fmt_num(n):
+                    fl = float(n)
+                    return str(int(fl)) if fl.is_integer() else f"{fl:.2f}"
+
+                now_str = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+                location_str = f"{user_lat:.4f}° N, {user_lon:.4f}° E"
+
+                body = request.get_json(silent=True) or {}
+                food_prep = (body.get("food_preparing_notes") or "").strip()
+                deliv_note = (body.get("delivery_notes") or "").strip()
+                instructions_parts = []
+                if food_prep:
+                    instructions_parts.append(f"Food prep: {food_prep}")
+                if deliv_note:
+                    instructions_parts.append(f"Delivery: {deliv_note}")
+                instructions_text = " | ".join(instructions_parts) if instructions_parts else "None"
+
+                item_lines = "\n".join(
+                    f"{it['name']} x {it['quantity']} = {_fmt_num(it['item_total'])}"
+                    for it in items
+                )
+
+                bill_str = (
+                    f"Restaurant name: {active_cart['restaurant_name']}\n"
+                    f"Ordered by: {username}\n"
+                    f"Timestamp: {now_str}\n"
+                    f"Location: {location_str}\n"
+                    f"Delivered by: Pending Assignment\n\n"
+                    f"{item_lines}\n\n"
+                    f"Instructions: {instructions_text}\n\n"
+                    f"Total = {_fmt_num(raw_total)}\n"
+                    f"Discount = {_fmt_num(discount_amount)}\n"
+                    f"Delivery fee = {_fmt_num(delivery_fee)}\n\n"
+                    f"Sum total = {_fmt_num(total_bill)}"
+                )
+
+                # 3. Calculate delivery estimate based on GPS distance and traffic
+                rest_lat = float(active_cart.get("restaurant_latitude") or 23.726154)
+                rest_lon = float(active_cart.get("restaurant_longitude") or 90.390298)
+
+                delivery_est = calculate_order_delivery_time(
+                    {"latitude": rest_lat, "longitude": rest_lon},
+                    {"latitude": user_lat, "longitude": user_lon},
+                    vehicle="bike"
+                )
+
+                # 4. Create order (rider_username is NULL until a rider accepts)
                 order_id = f"OD-{uuid.uuid4().hex[:8].upper()}"
                 cur.execute(
                     load_query("user.sql", "create_order"),
-                    (order_id, username, cart_id, user_lon, user_lat, bill_str)
+                    (order_id, username, cart_id, None, user_lon, user_lat, bill_str)
                 )
 
-                # 4. Create payment record with 'Cash on delivery' (Requirement 9)
+                # 5. Create payment record with 'Cash on delivery'
                 tx_id = f"COD-{uuid.uuid4().hex[:10].upper()}"
                 cur.execute(
                     load_query("user.sql", "create_payment"),
                     (order_id, username, tx_id)
                 )
 
-                # 5. Mark cart as ordered
+                # 6. Mark cart as ordered
                 cur.execute(load_query("user.sql", "update_cart_status_ordered"), (cart_id,))
 
                 conn.commit()
 
                 return jsonify({
                     "success": True,
-                    "message": "Order placed successfully! Your meal is now delivering.",
+                    "message": "Order placed successfully! The kitchen is now preparing your food.",
                     "order_id": order_id,
-                    "status": "delivering",
+                    "status": "preparing",
                     "bill": bill_str,
                     "payment_method": "Cash on delivery",
-                    "restaurant_name": active_cart["restaurant_name"]
+                    "restaurant_name": active_cart["restaurant_name"],
+                    "delivery_estimate": delivery_est,
+                    "rider": None
                 }), 201
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
+
+
+def _extract_sum_total(bill_text):
+    if not bill_text:
+        return "৳0.00"
+    for line in str(bill_text).splitlines():
+        if "Sum total" in line or "Sum Total" in line:
+            parts = line.split("=")
+            if len(parts) > 1:
+                val = parts[1].strip()
+                return f"৳{val}" if not val.startswith("৳") else val
+    val = str(bill_text).strip()
+    return f"৳{val}" if not val.startswith("৳") else val
 
 
 # ---------------------------------------------------------------------------
@@ -627,10 +740,27 @@ def get_orders():
 
                 orders = []
                 for o in rows:
+                    o_rest_lat = float(o["restaurant_latitude"]) if o.get("restaurant_latitude") is not None else 23.726154
+                    o_rest_lon = float(o["restaurant_longitude"]) if o.get("restaurant_longitude") is not None else 90.390298
+                    o_user_lat = float(o["latitude"]) if o.get("latitude") is not None else 23.726154
+                    o_user_lon = float(o["longitude"]) if o.get("longitude") is not None else 90.390298
+                    o_vehicle = o.get("rider_vehicle") or "bike"
+
+                    o_deliv_est = calculate_order_delivery_time(
+                        {"latitude": o_rest_lat, "longitude": o_rest_lon},
+                        {"latitude": o_user_lat, "longitude": o_user_lon},
+                        vehicle=o_vehicle
+                    )
+
+                    clean_bill = o["bill"]
+                    if "Desc:" in clean_bill:
+                        clean_bill = re.sub(r"\n\s*Desc:[^\n]*", "", clean_bill)
+
                     orders.append({
                         "order_id": o["order_id"],
                         "status": o["status"],
-                        "bill": o["bill"],
+                        "bill": clean_bill,
+                        "total_amount": _extract_sum_total(clean_bill),
                         "order_timestamp": o.get("order_timestamp"),
                         "final_timestamp": o.get("final_timestamp"),
                         "payment_method": o.get("payment_method"),
@@ -639,7 +769,21 @@ def get_orders():
                         "restaurant_id": o["restaurant_id"],
                         "restaurant_name": o["restaurant_name"],
                         "latitude": float(o["latitude"]) if o.get("latitude") is not None else None,
-                        "longitude": float(o["longitude"]) if o.get("longitude") is not None else None
+                        "longitude": float(o["longitude"]) if o.get("longitude") is not None else None,
+                        "distance_meters": float(o.get("distance_meters") or 0.0),
+                        "distance_km": round(float(o.get("distance_meters") or 0.0) / 1000.0, 2) if o.get("distance_meters") else o_deliv_est["distance_km"],
+                        "rider_name": o.get("rider_name"),
+                        "rider_phone": o.get("rider_phone"),
+                        "rider_vehicle": o.get("rider_vehicle"),
+                        "rider_username": o.get("rider_username"),
+                        "delivery_estimate": o_deliv_est,
+                        "review": {
+                            "rider_rating": int(o["rider_rating"]) if o.get("rider_rating") is not None else None,
+                            "rider_review": o.get("rider_review"),
+                            "restaurant_rating": int(o["restaurant_rating"]) if o.get("restaurant_rating") is not None else None,
+                            "restaurant_review": o.get("restaurant_review"),
+                            "timestamp": o.get("review_timestamp")
+                        } if o.get("restaurant_rating") is not None or o.get("rider_rating") is not None else None
                     })
 
                 return jsonify({"success": True, "orders": orders}), 200
@@ -658,7 +802,7 @@ def get_order_detail(order_id):
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(load_query("user.sql", "get_order_by_id"), (order_id, username))
+                cur.execute(load_query("user.sql", "get_order_detail"), (order_id, username))
                 o = cur.fetchone()
 
                 if not o:
@@ -679,12 +823,60 @@ def get_order_detail(order_id):
                         "item_total": float(it["item_total"])
                     })
 
+                rest_lat = float(o["restaurant_latitude"]) if o.get("restaurant_latitude") is not None else 23.726154
+                rest_lon = float(o["restaurant_longitude"]) if o.get("restaurant_longitude") is not None else 90.390298
+                user_lat = float(o["latitude"]) if o.get("latitude") is not None else 23.726154
+                user_lon = float(o["longitude"]) if o.get("longitude") is not None else 90.390298
+                rider_v = o.get("rider_vehicle") or "bike"
+
+                deliv_est = calculate_order_delivery_time(
+                    {"latitude": rest_lat, "longitude": rest_lon},
+                    {"latitude": user_lat, "longitude": user_lon},
+                    vehicle=rider_v
+                )
+
+                bill_text = o.get("bill") or ""
+                if "\n" not in bill_text and items:
+                    def _fmt_local(n):
+                        fl = float(n)
+                        return str(int(fl)) if fl.is_integer() else f"{fl:.2f}"
+
+                    raw_total = sum(float(it["price"]) * int(it["quantity"]) for it in items)
+                    subtotal = sum(float(it["item_total"]) for it in items)
+                    discount_amount = max(0.0, round(raw_total - subtotal, 2))
+                    delivery_fee = 50.0
+                    total_bill = round(subtotal + delivery_fee, 2)
+
+                    item_lines = "\n".join(
+                        f"{it['name']} x {it['quantity']} = {_fmt_local(it['item_total'])}"
+                        for it in items
+                    )
+
+                    rider_disp = o.get("rider_name") or o.get("rider_username") or "Pending Assignment"
+                    bill_text = (
+                        f"Restaurant name: {o['restaurant_name']}\n"
+                        f"Ordered by: {username}\n"
+                        f"Timestamp: {o.get('order_timestamp') or 'N/A'}\n"
+                        f"Location: {user_lat:.4f}° N, {user_lon:.4f}° E\n"
+                        f"Delivered by: {rider_disp}\n\n"
+                        f"{item_lines}\n\n"
+                        f"Instructions: None\n\n"
+                        f"Total = {_fmt_local(raw_total)}\n"
+                        f"Discount = {_fmt_local(discount_amount)}\n"
+                        f"Delivery fee = {_fmt_local(delivery_fee)}\n\n"
+                        f"Sum total = {_fmt_local(total_bill)}"
+                    )
+
+                if "Desc:" in bill_text:
+                    bill_text = re.sub(r"\n\s*Desc:[^\n]*", "", bill_text)
+
                 return jsonify({
                     "success": True,
                     "order": {
                         "order_id": o["order_id"],
                         "status": o["status"],
-                        "bill": o["bill"],
+                        "bill": bill_text,
+                        "total_amount": _extract_sum_total(bill_text),
                         "order_timestamp": o.get("order_timestamp"),
                         "final_timestamp": o.get("final_timestamp"),
                         "payment_method": o.get("payment_method"),
@@ -694,7 +886,159 @@ def get_order_detail(order_id):
                         "restaurant_name": o["restaurant_name"],
                         "latitude": float(o["latitude"]) if o.get("latitude") is not None else None,
                         "longitude": float(o["longitude"]) if o.get("longitude") is not None else None,
+                        "distance_meters": float(o.get("distance_meters") or 0.0),
+                        "distance_km": round(float(o.get("distance_meters") or 0.0) / 1000.0, 2) if o.get("distance_meters") else deliv_est["distance_km"],
+                        "rider_name": o.get("rider_name"),
+                        "rider_phone": o.get("rider_phone"),
+                        "rider_vehicle": o.get("rider_vehicle"),
+                        "rider_username": o.get("rider_username"),
+                        "delivery_estimate": deliv_est,
+                        "review": {
+                            "rider_rating": int(o["rider_rating"]) if o.get("rider_rating") is not None else None,
+                            "rider_review": o.get("rider_review"),
+                            "restaurant_rating": int(o["restaurant_rating"]) if o.get("restaurant_rating") is not None else None,
+                            "restaurant_review": o.get("restaurant_review"),
+                            "timestamp": o.get("review_timestamp")
+                        } if o.get("restaurant_rating") is not None or o.get("rider_rating") is not None else None,
                         "items": items
+                    }
+                }), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@user_bp.route("/user/orders/<order_id>/complete", methods=["POST"])
+def complete_order(order_id):
+    payload, err = _get_authenticated_user()
+    if err:
+        return err
+
+    username = payload.get("username")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT order_id FROM orders WHERE order_id = %s AND username = %s", (order_id, username))
+                if not cur.fetchone():
+                    return jsonify({"success": False, "message": "Order not found"}), 404
+
+                cur.execute(load_query("user.sql", "mark_order_delivered"), (order_id, username))
+                conn.commit()
+
+                return jsonify({"success": True, "message": "Order marked as delivered."}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@user_bp.route("/user/orders/<order_id>/pickup", methods=["POST"])
+def confirm_pickup_order(order_id):
+    payload, err = _get_authenticated_user()
+    if err:
+        return err
+
+    username = payload.get("username")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT order_id, status, rider_username, bill FROM orders WHERE order_id = %s", (order_id,))
+                order_row = cur.fetchone()
+                if not order_row:
+                    return jsonify({"success": False, "message": "Order not found"}), 404
+
+                rider_user = order_row.get("rider_username")
+                if not rider_user:
+                    cur.execute("SELECT username FROM rider WHERE status IN ('online', 'delivering') ORDER BY RANDOM() LIMIT 1")
+                    r_candidate = cur.fetchone()
+                    rider_user = r_candidate["username"] if r_candidate else None
+
+                cur.execute(load_query("user.sql", "confirm_order_pickup"), (rider_user, order_id))
+
+                if rider_user:
+                    cur.execute("SELECT name FROM users WHERE username = %s", (rider_user,))
+                    u_row = cur.fetchone()
+                    rider_name = u_row["name"] if u_row and u_row.get("name") else rider_user
+                    current_bill = order_row.get("bill") or ""
+                    if "Delivered by:" in current_bill:
+                        new_bill = re.sub(r"Delivered by:.*", f"Delivered by: {rider_name}", current_bill)
+                        cur.execute("UPDATE orders SET bill = %s WHERE order_id = %s", (new_bill, order_id))
+
+                conn.commit()
+
+                return jsonify({
+                    "success": True,
+                    "message": "Courier confirmed food pickup! Out for delivery now.",
+                    "status": "delivering",
+                    "rider_username": rider_user
+                }), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+
+@user_bp.route("/user/orders/<order_id>/review", methods=["POST"])
+def submit_order_review(order_id):
+    payload, err = _get_authenticated_user()
+    if err:
+        return err
+
+    username = payload.get("username")
+    body = request.get_json(silent=True) or {}
+
+    raw_restaurant_rating = body.get("restaurant_rating")
+    restaurant_review = body.get("restaurant_review")
+    raw_rider_rating = body.get("rider_rating")
+    rider_review = body.get("rider_review")
+
+    # Validate restaurant_rating (1-5)
+    if raw_restaurant_rating is None:
+        return jsonify({"success": False, "message": "Restaurant rating is required"}), 400
+    try:
+        restaurant_rating = int(raw_restaurant_rating)
+        if not (1 <= restaurant_rating <= 5):
+            return jsonify({"success": False, "message": "Restaurant rating must be between 1 and 5"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "message": "Invalid restaurant rating"}), 400
+
+    # Validate rider_rating (1-5) if provided
+    rider_rating = None
+    if raw_rider_rating is not None and str(raw_rider_rating).strip() != "":
+        try:
+            rider_rating = int(raw_rider_rating)
+            if not (1 <= rider_rating <= 5):
+                return jsonify({"success": False, "message": "Rider rating must be between 1 and 5"}), 400
+        except (ValueError, TypeError):
+            return jsonify({"success": False, "message": "Invalid rider rating"}), 400
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT order_id, status FROM orders WHERE order_id = %s AND username = %s", (order_id, username))
+                order_row = cur.fetchone()
+                if not order_row:
+                    return jsonify({"success": False, "message": "Order not found"}), 404
+
+                cur.execute(
+                    load_query("user.sql", "submit_order_review"),
+                    (
+                        order_id,
+                        rider_rating,
+                        rider_review.strip() if rider_review else None,
+                        restaurant_rating,
+                        restaurant_review.strip() if restaurant_review else None,
+                    )
+                )
+                conn.commit()
+
+                return jsonify({
+                    "success": True,
+                    "message": "Review submitted successfully!",
+                    "review": {
+                        "order_id": order_id,
+                        "rider_rating": rider_rating,
+                        "rider_review": rider_review,
+                        "restaurant_rating": restaurant_rating,
+                        "restaurant_review": restaurant_review
                     }
                 }), 200
     except Exception as e:
