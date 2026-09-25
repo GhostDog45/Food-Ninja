@@ -204,7 +204,7 @@ VALUES (
     %s,
     %s,
     ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
-    'preparing',
+    'pending',
     %s,
     CURRENT_TIMESTAMP
 );

@@ -9,8 +9,6 @@ import { customerNav } from "@/lib/platform";
 import {
   apiGetUserOrders,
   apiSubmitOrderReview,
-  apiCompleteOrder,
-  apiConfirmOrderPickup,
   type CustomerOrder,
 } from "@/lib/backend";
 import { useToast } from "@/components/toast-provider";
@@ -81,8 +79,6 @@ export default function OrderHistoryPage() {
   const [riderReview, setRiderReview] = useState<string>("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
-  // Status updating state
-  const [completingOrderId, setCompletingOrderId] = useState<string | null>(null);
 
   async function fetchOrders() {
     setIsLoading(true);
@@ -155,47 +151,20 @@ export default function OrderHistoryPage() {
     }
   }
 
-  async function handleConfirmPickup(orderId: string) {
-    try {
-      await apiConfirmOrderPickup(orderId);
-      toast("Courier confirmed food pickup! Out for delivery now.", "success");
-      setOrders((prev) =>
-        prev.map((o) => (o.order_id === orderId ? { ...o, status: "delivering" } : o))
-      );
-    } catch (err: any) {
-      toast(err.message || "Failed to confirm pickup", "danger");
-    }
-  }
-
-  async function handleMarkDelivered(orderId: string) {
-    setCompletingOrderId(orderId);
-    try {
-      await apiCompleteOrder(orderId);
-      toast("Order marked as delivered! You can now leave a review.", "success");
-      setOrders((prev) =>
-        prev.map((o) => (o.order_id === orderId ? { ...o, status: "delivered" } : o))
-      );
-    } catch (err: any) {
-      toast(err.message || "Failed to update status", "danger");
-    } finally {
-      setCompletingOrderId(null);
-    }
-  }
-
   const filteredOrders = orders.filter((o) => {
     if (filter === "active") {
-      return o.status === "pending" || o.status === "preparing" || o.status === "delivering";
+      return o.status === "pending" || o.status === "delivering";
     }
     if (filter === "delivered") {
-      return o.status === "delivered" || o.status === "cancelled";
+      return o.status === "delivered" || o.status === "cancelled" || o.status === "rejected";
     }
     return true;
   });
 
   const activeCount = orders.filter(
-    (o) => o.status === "pending" || o.status === "preparing" || o.status === "delivering"
+    (o) => o.status === "pending" || o.status === "delivering"
   ).length;
-  const deliveredCount = orders.filter((o) => o.status === "delivered").length;
+  const deliveredCount = orders.filter((o) => o.status === "delivered" || o.status === "cancelled" || o.status === "rejected").length;
 
   return (
     <CustomerAccessGuard>
@@ -302,9 +271,9 @@ export default function OrderHistoryPage() {
               {filteredOrders.map((order) => {
                 const isActive =
                   order.status === "pending" ||
-                  order.status === "preparing" ||
                   order.status === "delivering";
                 const isDelivered = order.status === "delivered";
+                const isRejected = order.status === "rejected";
                 const hasReview = Boolean(order.review);
 
                 return (
@@ -326,7 +295,7 @@ export default function OrderHistoryPage() {
                                 ? "success"
                                 : order.status === "delivering"
                                 ? "warning"
-                                : order.status === "cancelled"
+                                : order.status === "cancelled" || order.status === "rejected"
                                 ? "danger"
                                 : "primary"
                             }
@@ -349,6 +318,12 @@ export default function OrderHistoryPage() {
                         </span>
                       </div>
                     </div>
+
+                    {isRejected && (
+                      <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                        Sorry, the restaurant closed or, due to unfortunate events, failed to prepare the food.
+                      </p>
+                    )}
 
                     {/* Middle Details: Courier, ETA & Payment */}
                     <div className="grid gap-3 sm:grid-cols-3 text-xs bg-slate-50/70 p-3 rounded-2xl border border-black/5">
@@ -451,27 +426,6 @@ export default function OrderHistoryPage() {
                             <span>🛵</span>
                             <span>Track Live Order</span>
                           </Link>
-                        )}
-
-                        {order.status === "preparing" && (
-                          <button
-                            type="button"
-                            onClick={() => handleConfirmPickup(order.order_id)}
-                            className="rounded-full border border-amber-300 bg-amber-50 px-3.5 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition shadow-2xs"
-                          >
-                            🛵 Confirm Pickup
-                          </button>
-                        )}
-
-                        {order.status === "delivering" && (
-                          <button
-                            type="button"
-                            onClick={() => handleMarkDelivered(order.order_id)}
-                            disabled={completingOrderId === order.order_id}
-                            className="rounded-full border border-black/10 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
-                          >
-                            {completingOrderId === order.order_id ? "Updating..." : "✓ Mark Received"}
-                          </button>
                         )}
 
                         <button

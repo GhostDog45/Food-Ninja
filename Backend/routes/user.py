@@ -4,7 +4,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 from db import get_connection, load_query
 import auth
-from utils import calculate_order_delivery_time
+from utils import calculate_order_delivery_time, calculate_delivery_charge
 
 user_bp = Blueprint("user", __name__)
 
@@ -625,7 +625,17 @@ def checkout_cart():
                 raw_total = sum(float(it["price"]) * int(it["quantity"]) for it in items)
                 subtotal = sum(float(it["item_total"]) for it in items)
                 discount_amount = max(0.0, round(raw_total - subtotal, 2))
-                delivery_fee = 50.0
+                rest_lat = float(active_cart.get("restaurant_latitude") or 23.726154)
+                rest_lon = float(active_cart.get("restaurant_longitude") or 90.390298)
+                delivery_est = calculate_order_delivery_time(
+                    {"latitude": rest_lat, "longitude": rest_lon},
+                    {"latitude": user_lat, "longitude": user_lon},
+                    vehicle="bike"
+                )
+                delivery_fee = calculate_delivery_charge(
+                    delivery_est["distance_km"],
+                    delivery_est["estimated_delivery_mins"]
+                )
                 total_bill = round(subtotal + delivery_fee, 2)
 
                 def _fmt_num(n):
@@ -664,17 +674,7 @@ def checkout_cart():
                     f"Sum total = {_fmt_num(total_bill)}"
                 )
 
-                # 3. Calculate delivery estimate based on GPS distance and traffic
-                rest_lat = float(active_cart.get("restaurant_latitude") or 23.726154)
-                rest_lon = float(active_cart.get("restaurant_longitude") or 90.390298)
-
-                delivery_est = calculate_order_delivery_time(
-                    {"latitude": rest_lat, "longitude": rest_lon},
-                    {"latitude": user_lat, "longitude": user_lon},
-                    vehicle="bike"
-                )
-
-                # 4. Create order (rider_username is NULL until a rider accepts)
+                # Create order (rider_username is NULL until a rider accepts).
                 order_id = f"OD-{uuid.uuid4().hex[:8].upper()}"
                 cur.execute(
                     load_query("user.sql", "create_order"),
@@ -695,9 +695,9 @@ def checkout_cart():
 
                 return jsonify({
                     "success": True,
-                    "message": "Order placed successfully! The kitchen is now preparing your food.",
+                    "message": "Order placed successfully! The restaurant will confirm your order.",
                     "order_id": order_id,
-                    "status": "preparing",
+                    "status": "pending",
                     "bill": bill_str,
                     "payment_method": "Cash on delivery",
                     "restaurant_name": active_cart["restaurant_name"],
@@ -913,21 +913,7 @@ def complete_order(order_id):
     if err:
         return err
 
-    username = payload.get("username")
-
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT order_id FROM orders WHERE order_id = %s AND username = %s", (order_id, username))
-                if not cur.fetchone():
-                    return jsonify({"success": False, "message": "Order not found"}), 404
-
-                cur.execute(load_query("user.sql", "mark_order_delivered"), (order_id, username))
-                conn.commit()
-
-                return jsonify({"success": True, "message": "Order marked as delivered."}), 200
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+    return jsonify({"success": False, "message": "Only the assigned rider can complete a delivery"}), 403
 
 
 @user_bp.route("/user/orders/<order_id>/pickup", methods=["POST"])
@@ -936,43 +922,7 @@ def confirm_pickup_order(order_id):
     if err:
         return err
 
-    username = payload.get("username")
-
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT order_id, status, rider_username, bill FROM orders WHERE order_id = %s", (order_id,))
-                order_row = cur.fetchone()
-                if not order_row:
-                    return jsonify({"success": False, "message": "Order not found"}), 404
-
-                rider_user = order_row.get("rider_username")
-                if not rider_user:
-                    cur.execute("SELECT username FROM rider WHERE status IN ('online', 'delivering') ORDER BY RANDOM() LIMIT 1")
-                    r_candidate = cur.fetchone()
-                    rider_user = r_candidate["username"] if r_candidate else None
-
-                cur.execute(load_query("user.sql", "confirm_order_pickup"), (rider_user, order_id))
-
-                if rider_user:
-                    cur.execute("SELECT name FROM users WHERE username = %s", (rider_user,))
-                    u_row = cur.fetchone()
-                    rider_name = u_row["name"] if u_row and u_row.get("name") else rider_user
-                    current_bill = order_row.get("bill") or ""
-                    if "Delivered by:" in current_bill:
-                        new_bill = re.sub(r"Delivered by:.*", f"Delivered by: {rider_name}", current_bill)
-                        cur.execute("UPDATE orders SET bill = %s WHERE order_id = %s", (new_bill, order_id))
-
-                conn.commit()
-
-                return jsonify({
-                    "success": True,
-                    "message": "Courier confirmed food pickup! Out for delivery now.",
-                    "status": "delivering",
-                    "rider_username": rider_user
-                }), 200
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+    return jsonify({"success": False, "message": "Pickup must be confirmed by the assigned rider"}), 403
 
 
 

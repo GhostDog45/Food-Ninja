@@ -236,8 +236,8 @@ def owner_restaurant_detail(restaurant_id):
             open_time = data.get("open_time")
             close_time = data.get("close_time")
             status = data.get("status")
-            if status not in ("open", "closed"):
-                return jsonify({"success": False, "message": "Status must be open or closed"}), 400
+            if status not in ("open", "closed", "shutdown"):
+                return jsonify({"success": False, "message": "Status must be open, closed, or shutdown"}), 400
             cur.execute(load_query("owner.sql", "update_owner_restaurant"), (open_time, close_time, status, restaurant_id, owner_id))
             if cur.rowcount == 0:
                 return jsonify({"success": False, "message": "Restaurant not found"}), 404
@@ -329,5 +329,71 @@ def delete_owner_food(restaurant_id, food_id):
                 return jsonify({"success": False, "message": "Food item not found"}), 404
             conn.commit()
             return jsonify({"success": True, "message": "Food removed successfully"}), 200
+    except psycopg.Error:
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+
+@owner_bp.route("/owner/restaurants/<restaurant_id>/foods/<food_id>", methods=["PATCH"])
+def update_owner_food(restaurant_id, food_id):
+    payload, error = approved_owner_required()
+    if error:
+        return error
+    data = request.get_json() or {}
+    name = data.get("name")
+    description = data.get("description")
+    subcategory = data.get("subcategory", "")
+    try:
+        price = float(data.get("price"))
+        discount = float(data.get("discount", 0))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "Price and discount must be numbers"}), 400
+    if not isinstance(name, str) or not name.strip():
+        return jsonify({"success": False, "message": "Food name is required"}), 400
+    if not math.isfinite(price) or price < 0:
+        return jsonify({"success": False, "message": "Price cannot be negative"}), 400
+    if not math.isfinite(discount) or discount < 0 or discount > 100:
+        return jsonify({"success": False, "message": "Discount must be between 0 and 100"}), 400
+    if not isinstance(subcategory, str) or not re.fullmatch(r"[A-Za-z ]*", subcategory):
+        return jsonify({"success": False, "message": "Subcategory may contain only letters and spaces"}), 400
+    normalized_subcategory = re.sub(r" +", " ", subcategory.strip()).lower() or None
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(load_query("owner.sql", "update_food_by_owner"), (name.strip(), price, discount, description, normalized_subcategory, food_id, restaurant_id, payload["username"]))
+            if cur.rowcount == 0:
+                return jsonify({"success": False, "message": "Food item not found"}), 404
+            conn.commit()
+            return jsonify({"success": True, "message": "Food updated"}), 200
+    except psycopg.Error:
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+
+@owner_bp.route("/owner/restaurants/<restaurant_id>/orders", methods=["GET"])
+def owner_restaurant_orders(restaurant_id):
+    payload, error = approved_owner_required()
+    if error:
+        return error
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(load_query("owner.sql", "get_owner_restaurant"), (restaurant_id, payload["username"]))
+            if not cur.fetchone():
+                return jsonify({"success": False, "message": "Restaurant not found"}), 404
+            cur.execute(load_query("owner.sql", "get_owner_restaurant_orders"), (restaurant_id, payload["username"]))
+            return jsonify({"success": True, "orders": cur.fetchall() or []}), 200
+    except psycopg.Error:
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+
+@owner_bp.route("/owner/restaurants/<restaurant_id>/orders/<order_id>/cancel", methods=["POST"])
+def owner_cancel_pending_order(restaurant_id, order_id):
+    payload, error = approved_owner_required()
+    if error:
+        return error
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(load_query("owner.sql", "reject_owner_pending_order"), (order_id, restaurant_id, payload["username"]))
+            if cur.rowcount == 0:
+                return jsonify({"success": False, "message": "Pending order not found"}), 404
+            conn.commit()
+            return jsonify({"success": True, "message": "Order rejected"}), 200
     except psycopg.Error:
         return jsonify({"success": False, "message": "Database error"}), 500

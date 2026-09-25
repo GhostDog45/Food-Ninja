@@ -8,7 +8,6 @@ import { getAuthUser, apiGetRiderStatus } from "@/lib/backend";
 import { riderNav } from "@/lib/platform";
 
 export default function RiderLayout({ children }: { children: ReactNode }) {
-  void children;
   const router = useRouter();
   const [state, setState] = useState<"loading" | "approved" | "pending" | "blocked">("loading");
 
@@ -43,12 +42,5 @@ export default function RiderLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  return (
-    <AppShell role="Rider app" title="Rider workspace" subtitle="Rider tools will be added in a future release." nav={riderNav}>
-      <Panel className="mx-auto max-w-xl space-y-3 p-10 text-center">
-        <h1 className="text-2xl font-bold text-slate-900">Rider workspace coming soon</h1>
-        <p className="text-sm text-slate-600">Your rider account is approved. Delivery operations are not available yet.</p>
-      </Panel>
-    </AppShell>
-  );
+  return <>{children}</>;
 }

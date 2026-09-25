@@ -370,7 +370,7 @@ export async function apiGetLocation(): Promise<{
   return data;
 }
 
-export async function apiGetRiderStatus(): Promise<{ success: boolean; status: string; has_location: boolean }> {
+export async function apiGetRiderStatus(): Promise<{ success: boolean; status: string; has_location: boolean; vehicle?: string | null; balance?: number }> {
   const token = getAuthToken();
   if (!token) throw new Error("Authentication required");
 
@@ -380,6 +380,56 @@ export async function apiGetRiderStatus(): Promise<{ success: boolean; status: s
   const data = await res.json();
   if (!res.ok || !data.success) throw new Error(data.message || "Failed to fetch rider status");
   return data;
+}
+
+export type RiderOrder = {
+  order_id: string;
+  status: string;
+  bill: string;
+  order_timestamp: string;
+  final_timestamp?: string | null;
+  restaurant_id: string;
+  restaurant_name: string;
+  restaurant_latitude: number;
+  restaurant_longitude: number;
+  customer_latitude: number;
+  customer_longitude: number;
+  customer_name?: string;
+};
+
+async function riderApi(path: string, method = "GET"): Promise<any> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Rider authentication required");
+  const res = await fetch(`${BACKEND_URL}${path}`, { method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Rider request failed");
+  return data;
+}
+
+export async function apiSetRiderAvailability(status: "online" | "offline"): Promise<void> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Rider authentication required");
+  const res = await fetch(`${BACKEND_URL}/rider/availability`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to change availability");
+}
+
+export async function apiGetRiderOffers(): Promise<{ active_order: RiderOrder | null; offers: RiderOrder[] }> {
+  const data = await riderApi("/rider/orders/offers");
+  return { active_order: data.active_order || null, offers: data.offers || [] };
+}
+
+export async function apiAcceptRiderOrder(orderId: string): Promise<void> {
+  await riderApi(`/rider/orders/${encodeURIComponent(orderId)}/accept`, "POST");
+}
+
+export async function apiRiderOrderAction(orderId: string, action: "pickup" | "delivered"): Promise<void> {
+  await riderApi(`/rider/orders/${encodeURIComponent(orderId)}/${action}`, "POST");
+}
+
+export async function apiGetRiderHistory(): Promise<RiderOrder[]> {
+  const data = await riderApi("/rider/history");
+  return data.orders || [];
 }
 
 // Onboarding persistence helpers
@@ -526,12 +576,48 @@ export async function apiGetOwnerRestaurantDetail(restaurantId: string): Promise
   return data;
 }
 
-export async function apiUpdateOwnerRestaurant(restaurantId: string, payload: { open_time: string; close_time: string; status: "open" | "closed" }): Promise<void> {
+export async function apiUpdateOwnerRestaurant(restaurantId: string, payload: { open_time: string; close_time: string; status: "open" | "closed" | "shutdown" }): Promise<void> {
   const token = getAuthToken();
   if (!token) throw new Error("Authentication required");
   const res = await fetch(`${BACKEND_URL}/owner/restaurants/${restaurantId}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   const data = await res.json();
   if (!res.ok || !data.success) throw new Error(data.message || "Failed to update restaurant");
+}
+
+export type OwnerOrder = {
+  order_id: string;
+  status: string;
+  order_timestamp: string;
+  final_timestamp?: string | null;
+  bill: string;
+  username: string;
+  customer_name: string;
+  customer_phone: string;
+};
+
+export async function apiGetOwnerRestaurantOrders(restaurantId: string): Promise<OwnerOrder[]> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required");
+  const res = await fetch(`${BACKEND_URL}/owner/restaurants/${restaurantId}/orders`, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load restaurant orders");
+  return Array.isArray(data.orders) ? data.orders : [];
+}
+
+export async function apiCancelOwnerOrder(restaurantId: string, orderId: string): Promise<void> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required");
+  const res = await fetch(`${BACKEND_URL}/owner/restaurants/${restaurantId}/orders/${orderId}/cancel`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to cancel order");
+}
+
+export async function apiUpdateOwnerFood(restaurantId: string, foodId: string, payload: Omit<OwnerFood, "food_id" | "restaurant_id" | "category">): Promise<void> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required");
+  const res = await fetch(`${BACKEND_URL}/owner/restaurants/${restaurantId}/foods/${foodId}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to update food");
 }
 
 export async function apiGetAdminRestaurantDetail(restaurantId: string): Promise<{ restaurant: Record<string, unknown>; foods: OwnerFood[] }> {

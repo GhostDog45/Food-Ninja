@@ -92,19 +92,10 @@ CREATE TABLE orders (
 	cart_id varchar(64) NOT NULL UNIQUE REFERENCES cart(cart_id),
 	rider_username varchar(64) REFERENCES rider(username),
 	location geography(Point, 4326) NOT NULL,
-	status varchar(30) DEFAULT 'pending' CHECK (status IN ('pending', 'preparing', 'delivering', 'delivered', 'cancelled')),
+	status varchar(30) DEFAULT 'pending' CHECK (status IN ('pending', 'delivering', 'delivered', 'cancelled', 'rejected')),
 	order_timestamp timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	final_timestamp timestamp,
 	bill text NOT NULL
-);
-
-CREATE TABLE payment (
-	order_id varchar(64) PRIMARY KEY REFERENCES orders(order_id),
-	username varchar(64) NOT NULL REFERENCES users(username),
-	transaction_id varchar(100) NOT NULL UNIQUE,
-	payment_method varchar(50) NOT NULL,
-	status varchar(20) DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
-	timestamp timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE TABLE review (
@@ -141,3 +132,84 @@ CREATE TRIGGER cleanup_revoked_tokens_before_insert
 BEFORE INSERT ON revoked_tokens
 FOR EACH ROW
 EXECUTE FUNCTION remove_expired_revoked_tokens();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ALTER TABLE restaurant
+    DROP CONSTRAINT IF EXISTS restaurant_status_check;
+
+ALTER TABLE restaurant
+    ADD CONSTRAINT restaurant_status_check
+    CHECK (status IN ('pending', 'open', 'closed', 'shutdown', 'banned'));
+
+ALTER TABLE orders
+    DROP CONSTRAINT IF EXISTS orders_status_check;
+
+UPDATE orders
+SET status = 'pending'
+WHERE status = 'preparing';
+
+ALTER TABLE orders
+    ADD CONSTRAINT orders_status_check
+    CHECK (status IN ('pending', 'delivering', 'delivered', 'cancelled', 'rejected'));
+
+CREATE OR REPLACE FUNCTION handle_restaurant_status_change()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.status = 'shutdown' AND OLD.status IS DISTINCT FROM NEW.status THEN
+        UPDATE orders O
+        SET status = 'rejected',
+            final_timestamp = CURRENT_TIMESTAMP
+        FROM cart C
+        WHERE O.cart_id = C.cart_id
+          AND C.restaurant_id = NEW.restaurant_id
+          AND O.status = 'pending';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS restaurant_shutdown_rejects_pending_orders ON restaurant;
+
+CREATE TRIGGER restaurant_shutdown_rejects_pending_orders
+AFTER UPDATE OF status ON restaurant
+FOR EACH ROW
+EXECUTE FUNCTION handle_restaurant_status_change();
+
+CREATE OR REPLACE FUNCTION normalize_legacy_order_status()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.status = 'preparing' THEN
+        NEW.status := 'pending';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS normalize_legacy_order_status_before_insert ON orders;
+
+CREATE TRIGGER normalize_legacy_order_status_before_insert
+BEFORE INSERT OR UPDATE OF status ON orders
+FOR EACH ROW
+EXECUTE FUNCTION normalize_legacy_order_status();
+
+COMMIT;

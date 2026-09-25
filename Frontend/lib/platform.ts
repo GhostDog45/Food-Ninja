@@ -101,7 +101,7 @@ export const ownerNav: NavItem[] = [
 
 export const riderNav: NavItem[] = [
   { href: "/rider/dashboard", label: "Dashboard", hint: "Availability and map" },
-  { href: "/rider/earnings", label: "Earnings", hint: "Trips and balances" },
+  { href: "/rider/history", label: "Delivered Orders", hint: "Past deliveries" },
   { href: "/rider/profile", label: "Profile", hint: "Vehicle and rating" },
 ];
 

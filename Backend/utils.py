@@ -446,4 +446,11 @@ def calculate_order_delivery_time(restaurant_coords, user_coords, vehicle="bike"
         "traffic_delay_mins": traffic_delay_mins,
         "kitchen_prep_mins": kitchen_prep_mins,
         "transit_mins": transit_mins
-    }
+    }
+
+
+def calculate_delivery_charge(distance_km, estimated_delivery_mins):
+    """Return the delivery charge shared by the customer and assigned rider."""
+    distance = max(0.0, float(distance_km or 0.0))
+    minutes = max(0.0, float(estimated_delivery_mins or 0.0))
+    return round(30.0 + distance * 8.0 + max(0.0, minutes - 20.0) * 0.5, 2)

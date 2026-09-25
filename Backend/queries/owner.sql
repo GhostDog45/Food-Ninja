@@ -28,7 +28,35 @@ WHERE restaurant_id = %s AND owner_id = %s;
 --name:update_owner_restaurant
 UPDATE restaurant
 SET open_time = %s, close_time = %s, status = %s
-WHERE restaurant_id = %s AND owner_id = %s AND status <> 'pending';
+WHERE restaurant_id = %s AND owner_id = %s AND status NOT IN ('pending', 'banned');
+
+--name:get_owner_restaurant_orders
+SELECT O.order_id, O.status, O.order_timestamp::text AS order_timestamp,
+                         O.final_timestamp::text AS final_timestamp, O.bill, U.username,
+                         U.name AS customer_name, U.phone AS customer_phone
+FROM orders O
+JOIN cart C ON C.cart_id = O.cart_id
+JOIN users U ON U.username = O.username
+WHERE C.restaurant_id = %s
+        AND EXISTS (
+                        SELECT 1 FROM restaurant R
+                        WHERE R.restaurant_id = C.restaurant_id AND R.owner_id = %s
+        )
+ORDER BY CASE WHEN O.status = 'pending' THEN 0 ELSE 1 END,
+                                 O.order_timestamp ASC;
+
+--name:reject_owner_pending_order
+UPDATE orders O
+SET status = 'rejected', final_timestamp = CURRENT_TIMESTAMP
+FROM cart C
+WHERE O.cart_id = C.cart_id
+        AND O.order_id = %s
+        AND O.status = 'pending'
+        AND C.restaurant_id = %s
+        AND EXISTS (
+                        SELECT 1 FROM restaurant R
+                        WHERE R.restaurant_id = C.restaurant_id AND R.owner_id = %s
+        );
 
 --name:insert_restaurant
 INSERT INTO restaurant
@@ -71,3 +99,17 @@ WHERE food_id = %s
             FROM restaurant R
             WHERE R.restaurant_id = %s AND R.owner_id = %s
     );
+
+--name:update_food_by_owner
+UPDATE foods F
+SET name = %s,
+        price = %s,
+        discount = %s,
+        description = %s,
+        subcategory = %s
+WHERE F.food_id = %s
+  AND F.restaurant_id = %s
+  AND EXISTS (
+          SELECT 1 FROM restaurant R
+          WHERE R.restaurant_id = F.restaurant_id AND R.owner_id = %s
+  );

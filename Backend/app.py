@@ -13,7 +13,7 @@ from routes.nearby_restaurants import nearby_restaurants_bp
 from routes.orders import orders_bp
 from routes.owner import owner_bp
 from routes.admin import admin_bp
-from routes.rider import rider_bp
+from routes.rider import rider_bp, register_websocket_routes
 from routes.user import user_bp
 
 
@@ -37,6 +37,7 @@ app.register_blueprint(owner_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(rider_bp)
 app.register_blueprint(user_bp)
+register_websocket_routes(app)
 
 
 @app.route("/", methods=["GET"])
