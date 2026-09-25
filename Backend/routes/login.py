@@ -381,6 +381,12 @@ def login():
                         "message": "Invalid credentials"
                     }), 401
 
+                if stored_status == "banned":
+                    return jsonify({
+                        "success": False,
+                        "message": "this account is permanently banned"
+                    }), 403
+
                 token = auth.create_token(
                     stored_username,
                     user_type

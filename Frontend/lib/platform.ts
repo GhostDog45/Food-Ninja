@@ -94,11 +94,9 @@ export const adminPayments = [
 ];
 
 export const ownerNav: NavItem[] = [
-  { href: "/owner/dashboard", label: "Dashboard", hint: "Orders and revenue" },
-  { href: "/owner/menu", label: "Menu", hint: "Food_category and Foods" },
-  { href: "/owner/orders", label: "Orders", hint: "History and transactions" },
-  { href: "/owner/settings", label: "Settings", hint: "Hours and banking" },
-  { href: "/profile", label: "Account", hint: "Credentials & Security" },
+  { href: "/owner/dashboard", label: "View Restaurants", hint: "Approved restaurants" },
+  { href: "/owner/pending", label: "Pending Restaurants", hint: "Cancel deployments" },
+  { href: "/owner/deploy", label: "Deploy New Restaurant", hint: "Submit for approval" },
 ];
 
 export const riderNav: NavItem[] = [
@@ -113,9 +111,7 @@ export const adminNav: NavItem[] = [
   { href: "/admin/users", label: "Users", hint: "Customer accounts" },
   { href: "/admin/owners", label: "Restaurant Owners", hint: "Partner approvals" },
   { href: "/admin/restaurants", label: "Restaurants", hint: "Kitchen approvals" },
-  { href: "/admin/orders", label: "Orders", hint: "Live delivery feed" },
   { href: "/admin/riders", label: "Riders", hint: "Delivery fleet" },
-  { href: "/admin/payments", label: "Payments", hint: "Reconciliation" },
 ];
 
 export const customerNav: NavItem[] = [

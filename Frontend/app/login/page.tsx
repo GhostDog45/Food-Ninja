@@ -154,7 +154,11 @@ function LoginContent() {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setSelectedRole(item.id)}
+                    onClick={() => {
+                      setSelectedRole(item.id);
+                      setUserInfo("");
+                      setPassword("");
+                    }}
                     className={cn(
                       "rounded-2xl border p-4 text-left transition-all duration-150",
                       isSelected

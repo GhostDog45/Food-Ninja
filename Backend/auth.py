@@ -124,15 +124,6 @@ def revoke_token(token):
 
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS revoked_tokens (
-                        jti VARCHAR(255) PRIMARY KEY,
-                        expires_at TIMESTAMPTZ NOT NULL
-                    )
-                """)
-                query = load_query("token.sql", "remove_expired_tokens")
-                cur.execute(query)
-
                 query = load_query("token.sql", "add_revoked_token")
                 cur.execute(query, (jti, expires_at))
                 conn.commit()

@@ -87,6 +87,151 @@ def admin_get_users():
         }), 500
 
 
+@admin_bp.route("/admin/directory/<resource>", methods=["GET"])
+def admin_directory(resource):
+    _, error = approved_admin_required()
+    if error:
+        return error
+
+    resource_queries = {
+        "admins": ("get_admins_by_status", "admins"),
+        "owners": ("get_owners_by_status", "owners"),
+        "restaurants": ("get_restaurants_by_status", "restaurants"),
+        "riders": ("get_riders_by_status", "riders"),
+        "users": ("get_users_by_status", "users"),
+    }
+    query_info = resource_queries.get(resource)
+    if not query_info:
+        return jsonify({"success": False, "message": "Invalid directory resource"}), 404
+
+    status = request.args.get("status", "").strip().lower()
+    search = request.args.get("search", "").strip()
+    try:
+        offset = max(int(request.args.get("offset", "0")), 0)
+    except ValueError:
+        return jsonify({"success": False, "message": "Invalid directory offset"}), 400
+    valid_statuses = {
+        "admins": {"pending", "approved", "banned"},
+        "owners": {"pending", "approved", "banned"},
+        "restaurants": {"pending", "approved", "banned"},
+        "riders": {"pending", "approved", "banned"},
+        "users": {"active", "banned"},
+    }
+    if status not in valid_statuses[resource]:
+        return jsonify({"success": False, "message": "Invalid directory status"}), 400
+
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            query_name, response_key = query_info
+            if resource in ("admins", "owners"):
+                params = (status, search, search, search, search, offset)
+            elif resource == "users":
+                params = ("banned", "banned", status, search, search, search, search, offset)
+            elif resource == "restaurants":
+                params = (status, status, search, search, search, search, search, offset)
+            else:
+                params = (status, status, search, search, search, search, offset)
+            cur.execute(load_query("admin.sql", query_name), params)
+            return jsonify({"success": True, response_key: cur.fetchall() or []}), 200
+    except psycopg.Error:
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+
+@admin_bp.route("/admin/summary", methods=["GET"])
+def admin_summary():
+    _, error = approved_admin_required()
+    if error:
+        return error
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(load_query("admin.sql", "get_admin_summary"))
+            return jsonify({"success": True, "summary": cur.fetchone() or {}}), 200
+    except psycopg.Error:
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+
+@admin_bp.route("/admin/directory/<resource>/status", methods=["POST"])
+def admin_directory_status(resource):
+    _, error = approved_admin_required()
+    if error:
+        return error
+
+    update_queries = {
+        "admins": ("update_admin_status", "username"),
+        "owners": ("update_owner_status", "owner_id"),
+        "restaurants": ("update_restaurant_status", "restaurant_id"),
+        "riders": ("update_rider_status", "username"),
+        "users": ("update_user_status", "username"),
+    }
+    query_info = update_queries.get(resource)
+    if not query_info:
+        return jsonify({"success": False, "message": "Invalid directory resource"}), 404
+
+    data = request.get_json() or {}
+    identifier = data.get("identifier")
+    status = data.get("status")
+    valid_statuses = {
+        "admins": {"approved", "banned"},
+        "owners": {"approved", "rejected", "banned"},
+        "restaurants": {"closed", "banned"},
+        "riders": {"offline", "banned"},
+        "users": {"ok", "banned"},
+    }
+    if not isinstance(identifier, str) or not identifier or status not in valid_statuses[resource]:
+        return jsonify({"success": False, "message": "Invalid directory status update"}), 400
+
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            query_name, _ = query_info
+            cur.execute(load_query("admin.sql", query_name), (status, identifier))
+            conn.commit()
+            return jsonify({"success": True, "message": "Status updated"}), 200
+    except psycopg.Error:
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+
+@admin_bp.route("/admin/restaurants/<restaurant_id>", methods=["GET"])
+def admin_restaurant_detail(restaurant_id):
+    _, error = approved_admin_required()
+    if error:
+        return error
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(load_query("admin.sql", "get_admin_restaurant_details"), (restaurant_id,))
+            restaurant = cur.fetchone()
+            if not restaurant:
+                return jsonify({"success": False, "message": "Restaurant not found"}), 404
+            cur.execute(load_query("admin.sql", "get_admin_restaurant_foods"), (restaurant_id,))
+            return jsonify({"success": True, "restaurant": restaurant, "foods": cur.fetchall() or []}), 200
+    except psycopg.Error:
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+
+@admin_bp.route("/admin/profiles/<resource>/<identifier>", methods=["GET"])
+def admin_profile_detail(resource, identifier):
+    _, error = approved_admin_required()
+    if error:
+        return error
+    queries = {
+        "users": "get_admin_user_details",
+        "riders": "get_admin_rider_details",
+        "owners": "get_admin_owner_details",
+        "admins": "get_admin_admin_details",
+    }
+    query_name = queries.get(resource)
+    if not query_name:
+        return jsonify({"success": False, "message": "Invalid profile resource"}), 404
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(load_query("admin.sql", query_name), (identifier,))
+            profile = cur.fetchone()
+            if not profile:
+                return jsonify({"success": False, "message": "Profile not found"}), 404
+            return jsonify({"success": True, "profile": profile}), 200
+    except psycopg.Error:
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+
 @admin_bp.route("/admin/owners", methods=["GET"])
 @admin_bp.route("/admin/pending_owners", methods=["GET"])
 def admin_pending_owners():

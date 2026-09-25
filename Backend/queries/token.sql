@@ -9,7 +9,3 @@ LIMIT 1
 INSERT INTO revoked_tokens (jti, expires_at)
 VALUES (%s, %s)
 ON CONFLICT (jti) DO NOTHING
-
---name:remove_expired_tokens
-DELETE FROM revoked_tokens
-WHERE expires_at <= CURRENT_TIMESTAMP

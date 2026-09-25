@@ -33,15 +33,6 @@ export function AppShell({
     setUser(getAuthUser());
   }, []);
 
-  function handleBack() {
-    if (window.history.length > 1) {
-      router.back();
-      return;
-    }
-
-    router.push("/");
-  }
-
   async function handleLogout() {
     try {
       await apiLogout();
@@ -59,13 +50,6 @@ export function AppShell({
           <header className="w-full rounded-[24px] border border-black/5 bg-white/85 px-4 py-3 shadow-sm backdrop-blur">
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50"
-                  onClick={handleBack}
-                >
-                  ← Back
-                </button>
                 <button
                   type="button"
                   className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50 md:hidden"
@@ -100,27 +84,6 @@ export function AppShell({
               </div>
             </div>
 
-            <nav className="mt-3 flex items-center gap-2 overflow-x-auto border-t border-black/5 pt-3">
-              {nav.map((item) => {
-                const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    prefetch={false}
-                    className={cn(
-                      "whitespace-nowrap rounded-full border px-4 py-2 text-sm transition",
-                      active
-                        ? "border-amber-300 bg-amber-100 text-amber-800"
-                        : "border-black/10 bg-white text-slate-600 hover:bg-amber-50 hover:text-slate-900",
-                    )}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
           </header>
 
           <div className="flex gap-6">

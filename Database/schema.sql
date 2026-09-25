@@ -68,7 +68,8 @@ CREATE TABLE foods (
 	price numeric(10, 2) NOT NULL CHECK (price >= 0),
 	discount numeric(5, 2) DEFAULT 0.00 CHECK (discount >= 0 AND discount <= 100),
 	description text,
-	picture bytea
+	picture bytea,
+	subcategory varchar(50)
 );
 
 CREATE TABLE cart (
@@ -123,3 +124,20 @@ CREATE TABLE revoked_tokens (
 
 CREATE INDEX idx_revoked_tokens_expires_at
 ON revoked_tokens(expires_at);
+
+CREATE OR REPLACE FUNCTION remove_expired_revoked_tokens()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+	DELETE FROM revoked_tokens
+	WHERE expires_at <= CURRENT_TIMESTAMP;
+
+	RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER cleanup_revoked_tokens_before_insert
+BEFORE INSERT ON revoked_tokens
+FOR EACH ROW
+EXECUTE FUNCTION remove_expired_revoked_tokens();

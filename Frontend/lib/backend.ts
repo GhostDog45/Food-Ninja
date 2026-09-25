@@ -85,12 +85,12 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:500
 // Auth token storage helpers (localStorage)
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("food_ninja_token");
+  return sessionStorage.getItem("food_ninja_token");
 }
 
 export function getAuthUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
-  const user = localStorage.getItem("food_ninja_user");
+  const user = sessionStorage.getItem("food_ninja_user");
   if (!user) return null;
   try {
     return JSON.parse(user);
@@ -101,14 +101,14 @@ export function getAuthUser(): AuthUser | null {
 
 export function setAuthSession(token: string, user: AuthUser): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem("food_ninja_token", token);
-  localStorage.setItem("food_ninja_user", JSON.stringify(user));
+  sessionStorage.setItem("food_ninja_token", token);
+  sessionStorage.setItem("food_ninja_user", JSON.stringify(user));
 }
 
 export function clearAuthSession(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem("food_ninja_token");
-  localStorage.removeItem("food_ninja_user");
+  sessionStorage.removeItem("food_ninja_token");
+  sessionStorage.removeItem("food_ninja_user");
 }
 
 // Direct API calls to Flask Backend matching login.py exactly
@@ -471,6 +471,87 @@ export async function apiCreateRestaurant(payload: {
   return data;
 }
 
+export type OwnerFood = {
+  food_id: string;
+  restaurant_id: string;
+  category: string;
+  name: string;
+  price: number | string;
+  discount: number | string;
+  description?: string;
+  subcategory?: string | null;
+};
+
+export async function apiGetFoodCategories(): Promise<string[]> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required");
+  const res = await fetch(`${BACKEND_URL}/owner/food-categories`, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load food categories");
+  return Array.isArray(data.categories) ? data.categories : [];
+}
+
+export async function apiAddFood(restaurantId: string, payload: Omit<OwnerFood, "food_id" | "restaurant_id">): Promise<{ success: boolean; message: string }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required");
+  const res = await fetch(`${BACKEND_URL}/owner/restaurants/${restaurantId}/foods`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to add food");
+  return data;
+}
+
+export async function apiGetOwnerFoods(restaurantId: string): Promise<OwnerFood[]> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required");
+  const res = await fetch(`${BACKEND_URL}/owner/restaurants/${restaurantId}/foods`, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load foods");
+  return Array.isArray(data.foods) ? data.foods : [];
+}
+
+export async function apiDeleteFood(restaurantId: string, foodId: string): Promise<void> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required");
+  const res = await fetch(`${BACKEND_URL}/owner/restaurants/${restaurantId}/foods/${foodId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to remove food");
+}
+
+export async function apiGetOwnerRestaurantDetail(restaurantId: string): Promise<{ restaurant: OwnerRestaurant; foods: OwnerFood[] }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required");
+  const res = await fetch(`${BACKEND_URL}/owner/restaurants/${restaurantId}`, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load restaurant");
+  return data;
+}
+
+export async function apiUpdateOwnerRestaurant(restaurantId: string, payload: { open_time: string; close_time: string; status: "open" | "closed" }): Promise<void> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required");
+  const res = await fetch(`${BACKEND_URL}/owner/restaurants/${restaurantId}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to update restaurant");
+}
+
+export async function apiGetAdminRestaurantDetail(restaurantId: string): Promise<{ restaurant: Record<string, unknown>; foods: OwnerFood[] }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Admin authorization required");
+  const res = await fetch(`${BACKEND_URL}/admin/restaurants/${restaurantId}`, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load restaurant");
+  return data;
+}
+
+export async function apiGetAdminProfile(resource: string, identifier: string): Promise<Record<string, unknown>> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Admin authorization required");
+  const res = await fetch(`${BACKEND_URL}/admin/profiles/${resource}/${encodeURIComponent(identifier)}`, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load profile");
+  return data.profile;
+}
+
 export async function apiDeleteRestaurant(restaurantId: string): Promise<{ success: boolean; message: string }> {
   const token = getAuthToken();
   if (!token) throw new Error("Authentication required");
@@ -662,4 +743,53 @@ export async function apiGetAdminUsers(): Promise<AdminUserRow[]> {
   } catch {
     return [];
   }
+}
+
+export type AdminDirectoryResource = "admins" | "owners" | "restaurants" | "riders" | "users";
+export type AdminDirectoryStatus = "pending" | "approved" | "banned" | "active";
+
+export async function apiGetAdminDirectory(
+  resource: AdminDirectoryResource,
+  status: AdminDirectoryStatus,
+  search = "",
+  offset = 0
+): Promise<any[]> {
+  const token = getAuthToken();
+  if (!token) return [];
+
+  const params = new URLSearchParams({ status, search, offset: String(offset) });
+  const res = await fetch(`${BACKEND_URL}/admin/directory/${resource}?${params.toString()}`, {
+    headers: { "Authorization": `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load admin directory");
+  return Array.isArray(data[resource]) ? data[resource] : [];
+}
+
+export type AdminSummary = Record<string, number>;
+
+export async function apiGetAdminSummary(): Promise<AdminSummary> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Admin authorization required");
+  const res = await fetch(`${BACKEND_URL}/admin/summary`, { headers: { "Authorization": `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load admin summary");
+  return data.summary || {};
+}
+
+export async function apiSetAdminDirectoryStatus(
+  resource: AdminDirectoryResource,
+  identifier: string,
+  status: string
+): Promise<{ success: boolean; message: string }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Admin authorization required");
+  const res = await fetch(`${BACKEND_URL}/admin/directory/${resource}/status`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ identifier, status }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to update status");
+  return data;
 }

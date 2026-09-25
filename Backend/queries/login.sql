@@ -10,7 +10,7 @@ INSERT INTO admin
 
 
 --name:user_check
-SELECT username, password_hash
+SELECT username, password_hash, status
 FROM users
 WHERE username = %s OR email = %s OR phone = %s
 

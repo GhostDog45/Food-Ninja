@@ -8,9 +8,8 @@ import { getAuthUser, apiGetOwnerStatus } from "@/lib/backend";
 import { ownerNav } from "@/lib/platform";
 
 export default function OwnerLayout({ children }: { children: ReactNode }) {
-  void children;
   const router = useRouter();
-  const [state, setState] = useState<"loading" | "approved" | "pending" | "blocked">("loading");
+  const [state, setState] = useState<"loading" | "approved" | "pending" | "banned" | "blocked">("loading");
 
   useEffect(() => {
     const user = getAuthUser();
@@ -21,7 +20,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
     }
 
     apiGetOwnerStatus()
-      .then((data) => setState(data.status === "approved" ? "approved" : "pending"))
+      .then((data) => setState(data.status === "approved" ? "approved" : data.status === "banned" ? "banned" : "pending"))
       .catch(() => setState("pending"));
   }, [router]);
 
@@ -30,6 +29,10 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
   }
 
   if (state === "blocked") return null;
+
+  if (state === "banned") {
+    return <div className="min-h-screen bg-[#f6f1e8] flex items-center justify-center p-4"><Panel className="max-w-xl space-y-3 p-10 text-center"><h1 className="text-2xl font-bold text-slate-900">this account is permanently banned</h1><p className="text-sm text-slate-600">Owner portal access is forbidden.</p></Panel></div>;
+  }
 
   if (state === "pending") {
     return (
@@ -43,12 +46,5 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  return (
-    <AppShell role="Restaurant Owner" title="Owner workspace" subtitle="Owner tools will be added in a future release." nav={ownerNav}>
-      <Panel className="mx-auto max-w-xl space-y-3 p-10 text-center">
-        <h1 className="text-2xl font-bold text-slate-900">Owner workspace coming soon</h1>
-        <p className="text-sm text-slate-600">Your owner account is approved. Restaurant operations are not available yet.</p>
-      </Panel>
-    </AppShell>
-  );
+  return <>{children}</>;
 }
