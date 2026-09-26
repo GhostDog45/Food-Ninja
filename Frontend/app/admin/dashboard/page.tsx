@@ -43,21 +43,68 @@ export default function AdminDashboardPage() {
     { title: "Restaurant partners", items: metrics.slice(6, 12) },
   ];
 
-  return <AppShell role="Admin operations" title="Overview" subtitle="Platform health and account approvals." nav={adminNav} actions={<button type="button" onClick={loadSummary} aria-label="Refresh summary" title="Refresh summary" className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-emerald-500 hover:text-emerald-800">↻</button>}>
-    <div className="space-y-8">
-      <section className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5">
-        <SectionHeading eyebrow="Platform control" title="Operations overview" description="Current account, fleet, and restaurant status." />
-        <div className="flex flex-wrap gap-2">{[["/admin/orders", "Find an order"], ["/admin/categories", "Manage categories"]].map(([href, label]) => <Link key={href} href={href} className="rounded-lg bg-[#1c392d] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#28513f]">{label}</Link>)}</div>
-      </section>
-      {metricGroups.map((group) => <section key={group.title} className="space-y-3">
-        <h2 className="text-xs font-bold uppercase text-slate-500">{group.title}</h2>
-        <div className="grid grid-cols-2 border-y border-slate-200 bg-white sm:grid-cols-3 xl:grid-cols-4">
-          {group.items.map(([key, label]) => <div key={key} className="border-b border-r border-slate-100 px-4 py-4 last:border-r-0 sm:px-5">
-            <p className="text-xs text-slate-500">{label}</p>
-            <p className="mt-2 font-mono text-3xl font-semibold text-slate-900">{loading ? "–" : String(summary[key] ?? 0)}</p>
-          </div>)}
-        </div>
-      </section>)}
-    </div>
-  </AppShell>;
+  return (
+    <AppShell
+      role="Admin operations"
+      title="Overview"
+      subtitle="Platform health and account approvals."
+      nav={adminNav}
+      actions={
+        <button
+          type="button"
+          onClick={loadSummary}
+          aria-label="Refresh summary"
+          title="Refresh summary"
+          className="grid h-9 w-9 place-items-center rounded-full border border-black/10 bg-white text-slate-600 shadow-xs transition hover:border-amber-400 hover:text-amber-700 hover:bg-slate-50"
+        >
+          ↻
+        </button>
+      }
+    >
+      <div className="space-y-8">
+        <section className="flex flex-wrap items-end justify-between gap-4 border-b border-black/5 pb-5">
+          <SectionHeading
+            eyebrow="Platform control"
+            title="Operations overview"
+            description="Current account, fleet, and restaurant status across Dhaka."
+          />
+          <div className="flex flex-wrap gap-2.5">
+            {[
+              ["/admin/orders", "Find an order"],
+              ["/admin/categories", "Manage categories"],
+            ].map(([href, label]) => (
+              <Link
+                key={href}
+                href={href}
+                className="rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-amber-600"
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        {metricGroups.map((group) => (
+          <section key={group.title} className="space-y-3">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              {group.title}
+            </h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+              {group.items.map(([key, label]) => (
+                <div
+                  key={key}
+                  className="rounded-2xl border border-black/5 bg-white p-5 shadow-xs transition hover:border-amber-300 hover:bg-amber-50/20"
+                >
+                  <p className="text-xs font-medium text-slate-500">{label}</p>
+                  <p className="mt-2 font-mono text-3xl font-bold tracking-tight text-slate-900">
+                    {loading ? "–" : String(summary[key] ?? 0)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </AppShell>
+  );
 }

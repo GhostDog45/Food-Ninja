@@ -15,6 +15,7 @@ export default function RiderDashboardPage() {
   statusRef.current = status;
   const [baseReady, setBaseReady] = useState(false);
   const [balance, setBalance] = useState(0);
+  const [dueAmount, setDueAmount] = useState(0);
   const [liveConnected, setLiveConnected] = useState(false);
   const [offers, setOffers] = useState<RiderOrder[]>([]);
   const [activeOrder, setActiveOrder] = useState<RiderOrder | null>(null);
@@ -28,6 +29,7 @@ export default function RiderDashboardPage() {
       setStatus(rider.status);
       setBaseReady(rider.has_location && Boolean(rider.vehicle));
       setBalance(rider.balance || 0);
+      setDueAmount(rider.due_amount || 0);
       if (rider.status === "delivering") {
         const data = await apiGetRiderOffers();
         setActiveOrder(data.active_order);
@@ -134,7 +136,22 @@ export default function RiderDashboardPage() {
         </div>
         <div className="space-y-5">
           <Panel className="space-y-3 p-6"><SectionHeading eyebrow="Service area" title="Offer eligibility" /><p className="text-xs text-slate-600">Restaurant within 8 km and customer within 10 km of your saved base; restaurant within 4 km of current live location.</p></Panel>
-          <Panel className="space-y-3 p-6"><SectionHeading eyebrow="Wallet" title="Delivery earnings" /><p className="text-2xl font-bold text-slate-900">৳{balance.toFixed(2)}</p><p className="text-sm text-slate-600">The delivery fee from the customer bill is credited once delivery is completed.</p></Panel>
+          <Panel className="space-y-4 p-6">
+            <SectionHeading eyebrow="Financials" title="Earnings & Settlement" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-black/5 bg-slate-50/80 p-3.5">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Earnings Balance</span>
+                <p className="mt-1 text-xl font-bold text-emerald-600">৳{balance.toFixed(2)}</p>
+                <span className="text-[11px] text-slate-500">Your delivery earnings</span>
+              </div>
+              <div className="rounded-2xl border border-black/5 bg-slate-50/80 p-3.5">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Due to Platform</span>
+                <p className="mt-1 text-xl font-bold text-rose-700">৳{dueAmount.toFixed(2)}</p>
+                <span className="text-[11px] text-slate-500">Collected from COD</span>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600">Delivery fees are credited to your earnings balance. Cash collected from customers is tracked in Due to settle with owners/platform.</p>
+          </Panel>
         </div>
       </div>
     </AppShell>

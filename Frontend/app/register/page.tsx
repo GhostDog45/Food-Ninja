@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AuthChrome } from "@/components/auth-chrome";
 import { Badge, cn } from "@/components/ui";
 import { useToast } from "@/components/toast-provider";
-import { apiRegister, apiSendEmailVerification } from "@/lib/backend";
+import { apiRegister, apiSendEmailVerification, apiVerifyEmail } from "@/lib/backend";
 
 const ROLES = [
   { id: "user", title: "Customer", subtitle: "Order food & track deliveries", user_type: "user" },
@@ -34,10 +34,22 @@ function RegisterContent() {
   const [emailVerificationCode, setEmailVerificationCode] = useState("");
   const [verificationSentFor, setVerificationSentFor] = useState("");
   const [sendingVerification, setSendingVerification] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [resendCountdown, setResendCountdown] = useState(0);
   const [nid, setNid] = useState("");
   const [vehicle, setVehicle] = useState<"bike" | "bicycle">("bike");
 
   const [loading, setLoading] = useState(false);
+
+  // Countdown timer for resending verification code
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCountdown]);
 
   // Auto-select role if forwarded via query params
   useEffect(() => {
@@ -95,6 +107,11 @@ function RegisterContent() {
     if (!/^\d{6}$/.test(emailVerificationCode.trim()) || verificationSentFor !== cleanEmail) {
       toast("Request a code for this email and enter the six-digit code", "warning");
       return;
+    }
+
+    if (!isEmailVerified) {
+      const verified = await handleVerifyCode(emailVerificationCode.trim());
+      if (!verified) return;
     }
 
     setLoading(true);
@@ -171,11 +188,39 @@ function RegisterContent() {
       await apiSendEmailVerification(cleanEmail);
       setVerificationSentFor(cleanEmail);
       setEmailVerificationCode("");
+      setIsEmailVerified(false);
+      setResendCountdown(60);
       toast("Verification code sent. It expires in 10 minutes.", "success");
     } catch (error) {
       toast(error instanceof Error ? error.message : "Could not send verification code", "danger");
     } finally {
       setSendingVerification(false);
+    }
+  }
+
+  async function handleVerifyCode(codeToVerify?: string) {
+    const code = (codeToVerify ?? emailVerificationCode).trim();
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || verificationSentFor !== cleanEmail) {
+      toast("Please request a verification code for this email first", "warning");
+      return false;
+    }
+    if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+      toast("Enter the 6-digit verification code", "warning");
+      return false;
+    }
+    setVerifyingCode(true);
+    try {
+      await apiVerifyEmail(cleanEmail, code, false);
+      setIsEmailVerified(true);
+      toast("Email verified successfully!", "success");
+      return true;
+    } catch (error) {
+      setIsEmailVerified(false);
+      toast(error instanceof Error ? error.message : "Verification code is invalid or expired", "danger");
+      return false;
+    } finally {
+      setVerifyingCode(false);
     }
   }
 
@@ -281,6 +326,7 @@ function RegisterContent() {
                 if (e.target.value.trim().toLowerCase() !== verificationSentFor) {
                   setVerificationSentFor("");
                   setEmailVerificationCode("");
+                  setIsEmailVerified(false);
                 }
                 if (!username && e.target.value.includes("@")) {
                   const prefix = e.target.value.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "");
@@ -291,26 +337,68 @@ function RegisterContent() {
               placeholder="e.g. name@example.com"
               required
             />
-            <button type="button" onClick={() => void sendVerificationCode()} disabled={sendingVerification} className="mt-2 rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-50 disabled:opacity-50">
-              {sendingVerification ? "Sending code…" : verificationSentFor === email.trim().toLowerCase() ? "Resend verification code" : "Send verification code"}
+            <button
+              type="button"
+              onClick={() => void sendVerificationCode()}
+              disabled={sendingVerification || resendCountdown > 0}
+              className="mt-2 rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-50 disabled:opacity-50"
+            >
+              {sendingVerification
+                ? "Sending code…"
+                : resendCountdown > 0
+                ? `Resend code in ${resendCountdown}s`
+                : verificationSentFor === email.trim().toLowerCase()
+                ? "Resend verification code"
+                : "Send verification code"}
             </button>
           </label>
 
           <label className="block space-y-1 text-xs font-semibold text-slate-700">
-            <span>Email verification code *</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              pattern="[0-9]{6}"
-              value={emailVerificationCode}
-              onChange={(event) => setEmailVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-              className="w-full rounded-2xl border border-black/10 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20"
-              placeholder="6-digit code"
-              required
-            />
-            <span className="block text-[11px] font-normal text-slate-500">The code is checked when you create the account and expires after 10 minutes.</span>
+            <div className="flex items-center justify-between">
+              <span>Email verification code *</span>
+              {isEmailVerified && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600">
+                  <span>✓</span> Verified
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                pattern="[0-9]{6}"
+                value={emailVerificationCode}
+                onChange={(event) => {
+                  const val = event.target.value.replace(/\D/g, "").slice(0, 6);
+                  setEmailVerificationCode(val);
+                  setIsEmailVerified(false);
+                  if (val.length === 6 && verificationSentFor === email.trim().toLowerCase()) {
+                    void handleVerifyCode(val);
+                  }
+                }}
+                className={cn(
+                  "w-full rounded-2xl border bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-amber-500/20",
+                  isEmailVerified
+                    ? "border-emerald-500 focus:border-emerald-500"
+                    : "border-black/10 focus:border-amber-500"
+                )}
+                placeholder="6-digit code"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => void handleVerifyCode()}
+                disabled={verifyingCode || isEmailVerified || emailVerificationCode.trim().length !== 6}
+                className="shrink-0 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
+              >
+                {verifyingCode ? "Verifying…" : isEmailVerified ? "Verified ✓" : "Verify Code"}
+              </button>
+            </div>
+            <span className="block text-[11px] font-normal text-slate-500">
+              The code expires in 10 minutes. Verification is finalized when your account is created.
+            </span>
           </label>
 
           {/* Phone Number */}

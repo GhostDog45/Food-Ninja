@@ -123,7 +123,10 @@ def get_rider_profile():
         with get_connection() as conn, conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT username, name, email, phone, vehicle, balance, pfp_url, status, reg_date::text AS reg_date
+                SELECT username, name, email, phone, vehicle, balance, due_amount,
+                       ST_Y(location::geometry) AS latitude,
+                       ST_X(location::geometry) AS longitude,
+                       pfp_url, status, reg_date::text AS reg_date
                 FROM rider WHERE username = %s
                 """,
                 (username,)
@@ -131,6 +134,13 @@ def get_rider_profile():
             rider_row = cur.fetchone()
             if not rider_row:
                 return jsonify({"success": False, "message": "Rider not found"}), 404
+
+            rider_row["balance"] = float(rider_row.get("balance") or 0)
+            rider_row["due_amount"] = float(rider_row.get("due_amount") or 0)
+            if rider_row.get("latitude") is not None:
+                rider_row["latitude"] = float(rider_row["latitude"])
+            if rider_row.get("longitude") is not None:
+                rider_row["longitude"] = float(rider_row["longitude"])
 
             return jsonify({"success": True, "profile": rider_row}), 200
     except Exception as e:

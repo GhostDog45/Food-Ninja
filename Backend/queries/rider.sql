@@ -1,5 +1,5 @@
 --name:get_rider_status
-SELECT status, location, vehicle, name, balance
+SELECT status, location, vehicle, name, balance, due_amount
 FROM rider
 WHERE username = %s;
 

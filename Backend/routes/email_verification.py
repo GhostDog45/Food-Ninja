@@ -55,15 +55,40 @@ def send_email_verification():
     code = f"{secrets.randbelow(1_000_000):06d}"
 
     try:
+        _send_verification_email(email, code)
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 503
+    except smtplib.SMTPAuthenticationError as exc:
+        print(f"[Email Verification] Brevo SMTP authentication error: {exc}", flush=True)
+        code_num = getattr(exc, "smtp_code", None)
+        err_detail = getattr(exc, "smtp_error", b"")
+        if isinstance(err_detail, bytes):
+            err_detail = err_detail.decode("utf-8", errors="replace")
+        
+        if code_num == 525 or "Unauthorized IP" in str(err_detail):
+            msg = (
+                "Brevo SMTP Error: 525 Unauthorized IP address. "
+                "In your Brevo dashboard under 'SMTP & API' -> 'Authorized IP addresses' (or your SMTP Key settings), "
+                "either add your current IP address (103.94.135.141) or remove the IP restriction so local testing can connect."
+            )
+        elif code_num == 535:
+            msg = (
+                "Brevo SMTP Error: 535 Authentication failed. "
+                "Please verify your Brevo login and SMTP Key in Backend/.env."
+            )
+        else:
+            msg = f"Brevo SMTP Authentication Error ({code_num}): {err_detail}"
+
+        return jsonify({"success": False, "message": msg}), 502
+    except (smtplib.SMTPException, OSError) as exc:
+        print(f"[Email Verification] SMTP send error: {exc}", flush=True)
+        return jsonify({"success": False, "message": "Could not send verification email. Please check SMTP settings or request a new code."}), 502
+
+    try:
         with get_connection() as conn, conn.cursor() as cur:
             cur.execute(load_query("email_verification.sql", "upsert_email_verification"), (email, code))
             conn.commit()
-        _send_verification_email(email, code)
         return jsonify({"success": True, "message": "Verification code sent"}), 200
-    except ValueError as exc:
-        return jsonify({"success": False, "message": str(exc)}), 503
-    except (smtplib.SMTPException, OSError):
-        return jsonify({"success": False, "message": "Could not send verification email. Please request a new code."}), 502
     except psycopg.Error:
         return jsonify({"success": False, "message": "Could not save verification code"}), 500
 
@@ -73,16 +98,21 @@ def verify_email():
     data = request.get_json(silent=True) or {}
     email = data.get("email")
     code = data.get("code")
+    consume = bool(data.get("consume", False))
+
     if not isinstance(email, str) or not utils.is_valid_email(email.strip()):
         return jsonify({"success": False, "message": "A valid email address is required"}), 400
     if not isinstance(code, str) or len(code) != 6 or not code.isdigit():
         return jsonify({"success": False, "message": "A six-digit verification code is required"}), 400
 
+    email = email.strip().lower()
+
     try:
         with get_connection() as conn, conn.cursor() as cur:
+            query_name = "consume_email_verification" if consume else "get_valid_email_verification"
             cur.execute(
-                load_query("email_verification.sql", "consume_email_verification"),
-                (email.strip().lower(), code),
+                load_query("email_verification.sql", query_name),
+                (email, code),
             )
             if not cur.fetchone():
                 return jsonify({"success": False, "message": "Verification code is invalid or expired"}), 400

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { AppShell } from "@/components/app-shell";
 import { Badge, Panel, SectionHeading } from "@/components/ui";
 import { useToast } from "@/components/toast-provider";
@@ -8,9 +9,11 @@ import { riderNav } from "@/lib/platform";
 import {
   apiGetRiderProfile,
   apiUploadRiderPfp,
+  apiUpdateLocation,
   getImageUrl,
   type RiderProfile,
 } from "@/lib/backend";
+import { OSMLocationPicker } from "@/components/osm-location-picker";
 
 export default function RiderProfilePage() {
   const { toast } = useToast();
@@ -18,11 +21,22 @@ export default function RiderProfilePage() {
   const [loading, setLoading] = useState(true);
   const [uploadingPfp, setUploadingPfp] = useState(false);
 
+  // Static base location state
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
+  const [isSavingLocation, setIsSavingLocation] = useState(false);
+  const [tempLat, setTempLat] = useState(23.7925);
+  const [tempLng, setTempLng] = useState(90.4078);
+  const [tempAddress, setTempAddress] = useState("Gulshan 2, Dhaka");
+
   async function loadProfile() {
     try {
       setLoading(true);
       const data = await apiGetRiderProfile();
       setProfile(data);
+      if (data.latitude && data.longitude) {
+        setTempLat(Number(data.latitude));
+        setTempLng(Number(data.longitude));
+      }
     } catch (err: any) {
       toast(err.message || "Failed to load rider profile", "danger");
     } finally {
@@ -60,38 +74,193 @@ export default function RiderProfilePage() {
     }
   }
 
+  async function handleSaveLocation() {
+    setIsSavingLocation(true);
+    try {
+      await apiUpdateLocation({ latitude: tempLat, longitude: tempLng });
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              latitude: tempLat,
+              longitude: tempLng,
+            }
+          : null
+      );
+      setIsEditingLocation(false);
+      toast("Static base location updated successfully!", "success");
+    } catch (err: any) {
+      toast(err.message || "Failed to update base location", "danger");
+    } finally {
+      setIsSavingLocation(false);
+    }
+  }
+
+  const hasBaseLocation = Boolean(profile?.latitude && profile?.longitude);
+  const currentLat = profile?.latitude ? Number(profile.latitude).toFixed(4) : tempLat.toFixed(4);
+  const currentLng = profile?.longitude ? Number(profile.longitude).toFixed(4) : tempLng.toFixed(4);
+
   return (
     <AppShell
       role="Rider app"
       title="Rider Profile"
-      subtitle="Manage your identity, vehicle credentials, and profile picture."
+      subtitle="Manage your identity, static base location, vehicle credentials, and earnings."
       nav={riderNav}
       actions={
-        <Badge tone={profile?.status === "active" ? "success" : "neutral"}>
-          {profile?.status ? `Status: ${profile.status.toUpperCase()}` : "Active Rider"}
+        <Badge tone={profile?.status === "online" ? "success" : profile?.status === "delivering" ? "warning" : "neutral"}>
+          {profile?.status ? `Status: ${profile.status.toUpperCase()}` : "RIDER"}
         </Badge>
       }
     >
       <div className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
         <div className="space-y-6">
-          <Panel className="space-y-6 p-6">
+          {/* Financial Overview (Balance and Due Amount) */}
+          <Panel className="space-y-4 p-6 sm:p-8">
+            <SectionHeading
+              eyebrow="Financial Overview"
+              title="Wallet & Cash Settlement"
+              description="Track your earnings and cash collected on deliveries."
+            />
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-50/50 p-5 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
+                    Earnings Balance
+                  </span>
+                  <span className="text-lg">💰</span>
+                </div>
+                <p className="mt-2 text-3xl font-extrabold text-emerald-700">
+                  ৳{Number(profile?.balance || 0).toFixed(2)}
+                </p>
+                <p className="mt-1 text-xs text-emerald-800">
+                  Payable to you. Credited with delivery fees upon successful dropoff.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-rose-500/20 bg-rose-50/50 p-5 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-rose-800">
+                    Due Amount
+                  </span>
+                  <span className="text-lg">💵</span>
+                </div>
+                <p className="mt-2 text-3xl font-extrabold text-rose-700">
+                  ৳{Number(profile?.due_amount || 0).toFixed(2)}
+                </p>
+                <p className="mt-1 text-xs text-rose-800">
+                  Owed to restaurant owners/platform after collecting cash from customers on COD orders.
+                </p>
+              </div>
+            </div>
+          </Panel>
+
+          {/* Static Base Location & Map Picker */}
+          <Panel className="space-y-5 p-6 sm:p-8">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <SectionHeading
+                  eyebrow="Service Area Calibration"
+                  title="Static Base Location"
+                  description="Your static base determines the service perimeter for available delivery offers."
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditingLocation((prev) => !prev)}
+                className="rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-xs hover:bg-amber-50 hover:border-amber-200 transition"
+              >
+                {isEditingLocation ? "Hide Map" : hasBaseLocation ? "Update Base Location" : "Set Base Location"}
+              </button>
+            </div>
+
+            {/* Current Base Location Card */}
+            <div className="rounded-2xl border border-black/5 bg-slate-50/80 p-4 space-y-2">
+              <div className="flex items-center gap-2.5">
+                <span
+                  className={`h-3 w-3 rounded-full shrink-0 ${
+                    hasBaseLocation ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                  }`}
+                />
+                <div>
+                  <span className="text-sm font-bold text-slate-900 block">
+                    {hasBaseLocation ? "Base Location Configured" : "Base Location Not Set"}
+                  </span>
+                  <span className="font-mono text-xs text-slate-600">
+                    {hasBaseLocation
+                      ? `${currentLat}° N, ${currentLng}° E`
+                      : "Please set your base location coordinates below to receive order offers"}
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500">
+                Offers appear when restaurants are within 8 km and customers are within 10 km of this static base point.
+              </p>
+            </div>
+
+            {/* Expandable Location Picker */}
+            {isEditingLocation && (
+              <div className="space-y-4 rounded-2xl border border-amber-200 bg-amber-50/30 p-4 sm:p-5 animate-fadeIn">
+                <div>
+                  <p className="text-xs font-bold text-slate-900">Pin Your Static Base Location</p>
+                  <p className="text-[11px] text-slate-500">
+                    Click anywhere on the map, drag the pin, or click &quot;My Live GPS&quot; to calibrate your base coordinates.
+                  </p>
+                </div>
+
+                <OSMLocationPicker
+                  initialLat={Number(profile?.latitude || tempLat)}
+                  initialLng={Number(profile?.longitude || tempLng)}
+                  onLocationChange={(lat: number, lng: number, address?: string) => {
+                    setTempLat(lat);
+                    setTempLng(lng);
+                    if (address) setTempAddress(address);
+                  }}
+                />
+
+                <div className="flex items-center justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingLocation(false)}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveLocation}
+                    disabled={isSavingLocation}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-amber-500 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-amber-600 transition disabled:opacity-50"
+                  >
+                    <span>{isSavingLocation ? "Saving..." : "Save Base Location"}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </Panel>
+
+          {/* Account Details & Vehicle */}
+          <Panel className="space-y-6 p-6 sm:p-8">
             <SectionHeading eyebrow="Identity & Vehicle" title="Rider Account Details" />
 
             {/* Profile Picture Card */}
-            <div className="flex flex-col sm:flex-row items-center gap-5 p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-amber-500/10 to-transparent border border-emerald-500/20 shadow-2xs">
+            <div className="flex flex-col sm:flex-row items-center gap-5 p-5 rounded-2xl bg-gradient-to-r from-amber-50/80 to-orange-50/50 border border-amber-200/60 shadow-2xs">
               <div className="relative group shrink-0">
-                <div className="h-24 w-24 rounded-full overflow-hidden border-2 border-emerald-500 shadow-md bg-slate-800 flex items-center justify-center relative">
+                <div className="h-24 w-24 rounded-2xl overflow-hidden border-2 border-white ring-2 ring-amber-500/20 shadow-md bg-slate-100 flex items-center justify-center relative">
                   {profile?.pfp_url ? (
-                    <img
+                    <Image
                       src={getImageUrl(profile.pfp_url)}
                       alt={profile.name || profile.username || "Rider Avatar"}
+                      width={96}
+                      height={96}
+                      unoptimized
                       className="h-full w-full object-cover"
                     />
                   ) : (
                     <span className="text-3xl">🚴</span>
                   )}
                   {uploadingPfp && (
-                    <div className="absolute inset-0 bg-black/60 rounded-full flex flex-col items-center justify-center text-white text-[11px] font-semibold">
+                    <div className="absolute inset-0 bg-black/60 rounded-2xl flex flex-col items-center justify-center text-white text-[11px] font-semibold">
                       <span className="animate-spin text-base">⏳</span>
                       <span>Uploading...</span>
                     </div>
@@ -101,21 +270,16 @@ export default function RiderProfilePage() {
 
               <div className="flex-1 text-center sm:text-left space-y-2">
                 <div>
-                  <h3 className="text-base font-bold text-white">
+                  <h3 className="text-base font-bold text-slate-900">
                     {profile?.name || (loading ? "Loading..." : "Rider")}
                   </h3>
-                  <p className="text-xs text-slate-400 font-mono">
+                  <p className="text-xs text-slate-500 font-mono">
                     @{profile?.username || "username"} · {profile?.email || "No email"}
                   </p>
-                  {profile?.balance !== undefined && (
-                    <p className="text-xs font-semibold text-emerald-400 mt-0.5">
-                      Earnings Balance: ৳{Number(profile.balance).toFixed(2)}
-                    </p>
-                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                  <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 text-xs font-semibold shadow-xs transition">
+                  <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white px-4 py-1.5 text-xs font-semibold shadow-xs transition">
                     <span>📷</span> {uploadingPfp ? "Uploading..." : "Upload Profile Picture"}
                     <input
                       type="file"
@@ -125,43 +289,43 @@ export default function RiderProfilePage() {
                       className="hidden"
                     />
                   </label>
-                  <span className="text-[11px] text-slate-400">Max size 5 MB (JPG, PNG, WebP)</span>
+                  <span className="text-[11px] text-slate-500">Max size 5 MB (JPG, PNG, WebP)</span>
                 </div>
               </div>
             </div>
 
             {/* Profile Fields Grid */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3.5 space-y-1">
-                <span className="text-xs text-slate-400 block">Full Name</span>
-                <p className="text-sm font-semibold text-white">{profile?.name || "—"}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 block">Full Name</span>
+                <p className="text-sm font-semibold text-slate-900">{profile?.name || "—"}</p>
               </div>
 
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3.5 space-y-1">
-                <span className="text-xs text-slate-400 block">Username</span>
-                <p className="text-sm font-semibold text-white font-mono">@{profile?.username || "—"}</p>
+              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 block">Username</span>
+                <p className="text-sm font-semibold text-slate-900 font-mono">@{profile?.username || "—"}</p>
               </div>
 
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3.5 space-y-1">
-                <span className="text-xs text-slate-400 block">Contact Phone</span>
-                <p className="text-sm font-semibold text-white">{profile?.phone || "—"}</p>
+              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 block">Contact Phone</span>
+                <p className="text-sm font-semibold text-slate-900">{profile?.phone || "—"}</p>
               </div>
 
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3.5 space-y-1">
-                <span className="text-xs text-slate-400 block">Assigned Vehicle</span>
-                <p className="text-sm font-semibold text-amber-400 capitalize">
+              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 block">Assigned Vehicle</span>
+                <p className="text-sm font-semibold text-amber-700 capitalize">
                   {profile?.vehicle === "bike" ? "🏍️ Motorcycle" : "🚴 Bicycle"}
                 </p>
               </div>
 
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3.5 space-y-1">
-                <span className="text-xs text-slate-400 block">Registered Email</span>
-                <p className="text-sm font-semibold text-white truncate">{profile?.email || "—"}</p>
+              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 block">Registered Email</span>
+                <p className="text-sm font-semibold text-slate-900 truncate">{profile?.email || "—"}</p>
               </div>
 
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3.5 space-y-1">
-                <span className="text-xs text-slate-400 block">Registration Date</span>
-                <p className="text-sm font-semibold text-slate-300">
+              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 block">Registration Date</span>
+                <p className="text-sm font-semibold text-slate-700">
                   {profile?.reg_date ? new Date(profile.reg_date).toLocaleDateString() : "Active Member"}
                 </p>
               </div>
@@ -169,26 +333,36 @@ export default function RiderProfilePage() {
           </Panel>
         </div>
 
+        {/* Right column: Guidelines & Policy */}
         <div className="space-y-6">
-          <Panel className="space-y-4 p-6">
-            <SectionHeading eyebrow="Vehicle Policy" title="Courier Guidelines" />
-            <div className="space-y-3 text-xs text-slate-300 leading-relaxed">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3.5 space-y-1">
-                <p className="font-semibold text-emerald-400">🛡️ Keep Photo Up-to-Date</p>
-                <p className="text-slate-400">
-                  Customers and restaurants view your profile photo when coordinating pick up and delivery handoffs.
+          <Panel className="space-y-5 p-6 sm:p-8">
+            <SectionHeading eyebrow="Courier Policy" title="Operations & Guidelines" />
+            <div className="space-y-3.5 text-xs text-slate-600 leading-relaxed">
+              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
+                <p className="font-bold text-slate-900">📍 Static Base vs Live Location</p>
+                <p className="text-slate-600">
+                  Your <strong>static base location</strong> defines your home territory for receiving orders within 8-10 km. While on shift, your <strong>live location</strong> via WebSocket confirms you are within 4 km of the restaurant for pickup.
                 </p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3.5 space-y-1">
-                <p className="font-semibold text-amber-400">⚡ Speed & Vehicle Transit</p>
-                <p className="text-slate-400">
-                  Motorcycle couriers average 30 km/h in clear traffic, while bicycle couriers average 16 km/h. Delivery estimates are automatically calibrated to your registered vehicle.
+
+              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
+                <p className="font-bold text-slate-900">💵 Cash Collections & Due Amount</p>
+                <p className="text-slate-600">
+                  When you deliver a Cash on Delivery order, you collect the total bill from the customer. The delivery charge is credited to your balance, while the food amount is logged in your Due Amount to be remitted to the restaurant owner or platform.
                 </p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3.5 space-y-1">
-                <p className="font-semibold text-cyan-400">📍 Real-time Location</p>
-                <p className="text-slate-400">
-                  Keep your GPS tracking enabled while on active delivery shifts to ensure dispatch assignment works seamlessly.
+
+              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
+                <p className="font-bold text-slate-900">⚡ Vehicle Transit Speed</p>
+                <p className="text-slate-600">
+                  Motorcycle couriers are calibrated to 30 km/h in clear traffic; bicycle couriers average 16 km/h. Delivery estimates and customer notifications adjust automatically based on your vehicle.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
+                <p className="font-bold text-slate-900">🛡️ Profile Picture Verification</p>
+                <p className="text-slate-600">
+                  Ensure your photo is clearly visible. Restaurant staff and customers view your profile picture during order handover to ensure security and trust.
                 </p>
               </div>
             </div>

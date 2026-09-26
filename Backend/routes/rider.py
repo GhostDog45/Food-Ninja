@@ -103,6 +103,7 @@ def rider_status():
                 "has_location": row.get("location") is not None,
                 "vehicle": row.get("vehicle"),
                 "balance": float(row.get("balance") or 0),
+                "due_amount": float(row.get("due_amount") or 0),
             }), 200
     except psycopg.Error:
         return jsonify({"success": False, "message": "Database error"}), 500

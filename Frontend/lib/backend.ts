@@ -217,6 +217,17 @@ export async function apiSendEmailVerification(email: string): Promise<{ success
   return data;
 }
 
+export async function apiVerifyEmail(email: string, code: string, consume = false): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${BACKEND_URL}/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), code: code.trim(), consume }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Email verification failed");
+  return data;
+}
+
 export async function apiUpdateEmail(newEmail: string, password: string): Promise<UpdateResponse> {
   const token = getAuthToken();
   if (!token) {
@@ -399,7 +410,7 @@ export async function apiGetLocation(): Promise<{
   return data;
 }
 
-export async function apiGetRiderStatus(): Promise<{ success: boolean; status: string; has_location: boolean; vehicle?: string | null; balance?: number }> {
+export async function apiGetRiderStatus(): Promise<{ success: boolean; status: string; has_location: boolean; vehicle?: string | null; balance?: number; due_amount?: number }> {
   const token = getAuthToken();
   if (!token) throw new Error("Authentication required");
 
@@ -1481,6 +1492,9 @@ export type RiderProfile = {
   phone: string;
   vehicle: "bike" | "bicycle";
   balance: number;
+  due_amount: number;
+  latitude?: number | null;
+  longitude?: number | null;
   pfp_url?: string | null;
   status: string;
   reg_date?: string;

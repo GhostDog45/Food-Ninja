@@ -93,32 +93,169 @@ export function AdminDirectory({ resource, title, description }: Props) {
     if (actionLoading === identifier) return <span className="text-slate-400">Updating...</span>;
     if (resource === "users") {
       return row.status === "banned"
-        ? <button type="button" onClick={() => changeStatus(row, "approved")} className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">Unban</button>
-        : <button type="button" onClick={() => changeStatus(row, "banned")} className="rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white">Ban</button>;
+        ? <button type="button" onClick={() => changeStatus(row, "approved")} className="rounded-full border border-slate-300 bg-white px-3.5 py-1 text-xs font-semibold text-slate-800 shadow-2xs transition hover:bg-slate-50">Unban</button>
+        : <button type="button" onClick={() => changeStatus(row, "banned")} className="rounded-full border border-rose-200 bg-rose-50 px-3.5 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100">Ban</button>;
     }
     if (status === "pending") {
       return <div className="flex justify-end gap-2">
-        <button type="button" onClick={() => changeStatus(row, "approved")} className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">Approve</button>
-        <button type="button" onClick={() => changeStatus(row, resource === "owners" ? "declined" : "banned")} className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">Decline</button>
+        <button type="button" onClick={() => changeStatus(row, "approved")} className="rounded-full bg-emerald-600 px-3.5 py-1 text-xs font-semibold text-white shadow-2xs transition hover:bg-emerald-700">Approve</button>
+        <button type="button" onClick={() => changeStatus(row, resource === "owners" ? "declined" : "banned")} className="rounded-full border border-rose-200 bg-rose-50 px-3.5 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100">Decline</button>
       </div>;
     }
     return status === "banned"
-      ? <button type="button" onClick={() => changeStatus(row, "approved")} className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">Unban</button>
-      : <button type="button" onClick={() => changeStatus(row, "banned")} className="rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white">Ban</button>;
+      ? <button type="button" onClick={() => changeStatus(row, "approved")} className="rounded-full border border-slate-300 bg-white px-3.5 py-1 text-xs font-semibold text-slate-800 shadow-2xs transition hover:bg-slate-50">Unban</button>
+      : <button type="button" onClick={() => changeStatus(row, "banned")} className="rounded-full border border-rose-200 bg-rose-50 px-3.5 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100">Ban</button>;
   }
 
   const showEmail = resource !== "restaurants";
   const showPhone = resource !== "restaurants";
 
-  return <AppShell role="Admin panel" title={title} subtitle={description} nav={adminNav} actions={<button type="button" aria-label="Refresh directory" title="Refresh directory" onClick={() => load(offset)} className="grid h-9 w-9 place-items-center rounded-lg border border-black/10 bg-white text-slate-600 transition hover:border-amber-400 hover:text-amber-700">↻</button>}>
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5"><SectionHeading eyebrow="Platform directory" title={title} description={description} /><p className="font-mono text-sm text-slate-500">{rows.length.toString().padStart(2, "0")} shown</p></div>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">{tabs[resource].map((tab) => <button key={tab.key} type="button" onClick={() => setStatus(tab.key)} className={`rounded-md px-3 py-2 text-xs font-semibold transition ${status === tab.key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{tab.label}</button>)}</div>
-        <form onSubmit={submitSearch} className="flex min-w-[min(100%,360px)] flex-1 gap-2 sm:max-w-md"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${resource === "restaurants" ? "restaurant, owner, or ID" : "name, email, or phone"}`} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-amber-500" /><button type="submit" className="rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-white transition hover:bg-amber-600">Search</button></form>
+  return (
+    <AppShell
+      role="Admin panel"
+      title={title}
+      subtitle={description}
+      nav={adminNav}
+      actions={
+        <button
+          type="button"
+          aria-label="Refresh directory"
+          title="Refresh directory"
+          onClick={() => load(offset)}
+          className="grid h-9 w-9 place-items-center rounded-full border border-black/10 bg-white text-slate-600 shadow-xs transition hover:border-amber-400 hover:text-amber-700 hover:bg-slate-50"
+        >
+          ↻
+        </button>
+      }
+    >
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-black/5 pb-5">
+          <SectionHeading eyebrow="Platform directory" title={title} description={description} />
+          <span className="rounded-full border border-black/10 bg-white px-3.5 py-1 font-mono text-xs font-semibold text-slate-600 shadow-2xs">
+            {rows.length.toString().padStart(2, "0")} shown
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="inline-flex rounded-full border border-black/10 bg-slate-100/90 p-1 shadow-2xs">
+            {tabs[resource].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setStatus(tab.key)}
+                className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
+                  status === tab.key
+                    ? "bg-white text-slate-900 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={submitSearch} className="flex min-w-[min(100%,360px)] flex-1 gap-2 sm:max-w-md">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={`Search ${resource === "restaurants" ? "restaurant, owner, or ID" : "name, email, or phone"}`}
+              className="min-w-0 flex-1 rounded-full border border-black/10 bg-white px-4 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 shadow-2xs focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+            />
+            <button
+              type="submit"
+              className="rounded-full bg-amber-500 px-5 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-amber-600"
+            >
+              Search
+            </button>
+          </form>
+        </div>
+
+        {loading ? (
+          <div className="rounded-3xl border border-black/5 bg-white py-14 text-center text-sm text-slate-500 shadow-sm">
+            Loading directory…
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-slate-300 bg-white/60 py-16 text-center text-sm text-slate-500 shadow-sm">
+            No records found.
+          </div>
+        ) : (
+          <TableFrame className="rounded-3xl border border-black/5 bg-white shadow-sm overflow-hidden">
+            <table className="w-full min-w-160 text-left text-sm">
+              <thead className="border-b border-black/5 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="px-5 py-3.5">Identity</th>
+                  <th className="px-5 py-3.5">Name</th>
+                  {showEmail && <th className="px-5 py-3.5">Email</th>}
+                  {showPhone && <th className="px-5 py-3.5">Phone</th>}
+                  <th className="px-5 py-3.5">Status</th>
+                  <th className="px-5 py-3.5 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {rows.map((row) => {
+                  const identifier = String(row[idFields[resource]]);
+                  const href =
+                    resource === "restaurants"
+                      ? `/admin/restaurants/${encodeURIComponent(identifier)}`
+                      : `/admin/profiles/${resource}/${encodeURIComponent(identifier)}`;
+                  return (
+                    <tr key={identifier} className="transition hover:bg-amber-50/30">
+                      <td className="px-5 py-3.5 font-mono text-xs font-semibold">
+                        <Link href={href} className="text-amber-800 hover:text-amber-900 hover:underline">
+                          {identifier}
+                        </Link>
+                      </td>
+                      <td className="px-5 py-3.5 font-medium text-slate-900">
+                        <Link href={href} className="hover:text-amber-800 transition">
+                          {row.name || row.owner_name || "-"}
+                        </Link>
+                      </td>
+                      {showEmail && <td className="px-5 py-3.5 text-slate-600">{row.email || "-"}</td>}
+                      {showPhone && <td className="px-5 py-3.5 font-mono text-xs text-slate-600">{row.phone || "-"}</td>}
+                      <td className="px-5 py-3.5">
+                        <Badge tone={row.status === "banned" ? "danger" : row.status === "pending" ? "warning" : "success"}>
+                          {String(row.status || "active").toUpperCase()}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5 text-right">{action(row)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableFrame>
+        )}
+
+        <div className="flex items-center justify-between border-t border-black/5 pt-4">
+          <button
+            type="button"
+            disabled={offset === 0 || loading}
+            onClick={() => {
+              const next = Math.max(0, offset - 25);
+              setOffset(next);
+              load(next);
+            }}
+            className="rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span className="font-mono text-xs font-medium text-slate-500">
+            {offset + 1}–{offset + rows.length}
+          </span>
+          <button
+            type="button"
+            disabled={loading || rows.length < 25}
+            onClick={() => {
+              const next = offset + 25;
+              setOffset(next);
+              load(next);
+            }}
+            className="rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
       </div>
-      {loading ? <p className="border-y border-slate-200 py-10 text-center text-sm text-slate-500">Loading directory…</p> : rows.length === 0 ? <p className="border-y border-dashed border-slate-300 py-12 text-center text-sm text-slate-500">No records found.</p> : <TableFrame className="rounded-xl"><table className="w-full min-w-160 text-left text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">Identity</th><th className="px-4 py-3">Name</th>{showEmail && <th className="px-4 py-3">Email</th>}{showPhone && <th className="px-4 py-3">Phone</th>}<th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100 bg-white">{rows.map((row) => { const identifier = String(row[idFields[resource]]); const href = resource === "restaurants" ? `/admin/restaurants/${encodeURIComponent(identifier)}` : `/admin/profiles/${resource}/${encodeURIComponent(identifier)}`; return <tr key={identifier} className="transition hover:bg-amber-50/40"><td className="px-4 py-3 font-mono text-xs font-semibold"><Link href={href} className="text-amber-800 hover:underline">{identifier}</Link></td><td className="px-4 py-3 font-medium text-slate-800"><Link href={href} className="hover:text-amber-800">{row.name || row.owner_name || "-"}</Link></td>{showEmail && <td className="px-4 py-3 text-slate-600">{row.email || "-"}</td>}{showPhone && <td className="px-4 py-3 font-mono text-xs text-slate-600">{row.phone || "-"}</td>}<td className="px-4 py-3"><Badge tone={row.status === "banned" ? "danger" : row.status === "pending" ? "warning" : "success"}>{String(row.status || "active").toUpperCase()}</Badge></td><td className="px-4 py-3 text-right">{action(row)}</td></tr>; })}</tbody></table></TableFrame>}
-      <div className="flex items-center justify-between border-t border-slate-200 pt-4"><button type="button" disabled={offset === 0 || loading} onClick={() => { const next = Math.max(0, offset - 25); setOffset(next); load(next); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold disabled:opacity-40">Previous</button><span className="font-mono text-xs text-slate-500">{offset + 1}–{offset + rows.length}</span><button type="button" disabled={loading || rows.length < 25} onClick={() => { const next = offset + 25; setOffset(next); load(next); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold disabled:opacity-40">Next</button></div>
-    </div>
-  </AppShell>;
+    </AppShell>
+  );
 }
