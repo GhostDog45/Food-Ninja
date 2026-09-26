@@ -174,29 +174,10 @@ WHERE cart_id = %s AND food_id = %s;
 DELETE FROM cart
 WHERE username = %s AND status = 'pending';
 
---name:delete_cart_by_id
-DELETE FROM cart
-WHERE cart_id = %s AND username = %s;
-
 --name:get_food_restaurant_id
 SELECT food_id, restaurant_id, name, price, discount
 FROM foods
 WHERE food_id = %s;
-
---name:find_available_rider
-SELECT 
-    username,
-    name,
-    vehicle,
-    phone,
-    ST_Y(location::geometry) AS latitude,
-    ST_X(location::geometry) AS longitude
-FROM rider
-WHERE status IN ('online', 'delivering')
-ORDER BY 
-    CASE WHEN status = 'online' THEN 0 ELSE 1 END,
-    CASE WHEN location IS NOT NULL THEN ST_Distance(location, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography) ELSE 9999999 END ASC
-LIMIT 1;
 
 --name:create_order
 INSERT INTO orders (order_id, username, cart_id, rider_username, location, status, bill, order_timestamp,
@@ -298,42 +279,6 @@ LEFT JOIN rider RD ON O.rider_username = RD.username
 LEFT JOIN review RV ON O.order_id = RV.order_id
 WHERE (O.order_id = %s OR LOWER(O.order_id) = LOWER(%s)) AND LOWER(O.username) = LOWER(%s);
 
---name:get_order_by_id
-SELECT 
-    O.order_id,
-    O.username,
-    O.cart_id,
-    O.rider_username,
-    O.status,
-    O.bill,
-    O.order_timestamp::text,
-    O.final_timestamp::text,
-    ST_Y(O.location::geometry) AS latitude,
-    ST_X(O.location::geometry) AS longitude,
-    P.payment_method,
-    P.status AS payment_status,
-    P.transaction_id,
-    R.restaurant_id,
-    COALESCE(R.name, 'Restaurant') AS restaurant_name,
-    ST_Y(R.location::geometry) AS restaurant_latitude,
-    ST_X(R.location::geometry) AS restaurant_longitude,
-    ROUND(ST_Distance(R.location, O.location)::numeric, 0) AS distance_meters,
-    RD.name AS rider_name,
-    RD.phone AS rider_phone,
-    RD.vehicle AS rider_vehicle,
-    RV.rider_rating,
-    RV.rider_review,
-    RV.restaurant_rating,
-    RV.restaurant_review,
-    RV.timestamp::text AS review_timestamp
-FROM orders O
-LEFT JOIN cart C ON O.cart_id = C.cart_id
-LEFT JOIN restaurant R ON C.restaurant_id = R.restaurant_id
-LEFT JOIN payment P ON O.order_id = P.order_id
-LEFT JOIN rider RD ON O.rider_username = RD.username
-LEFT JOIN review RV ON O.order_id = RV.order_id
-WHERE (O.order_id = %s OR LOWER(O.order_id) = LOWER(%s)) AND LOWER(O.username) = LOWER(%s);
-
 --name:get_order_items
 SELECT 
     CI.food_id,
@@ -359,18 +304,3 @@ SET rider_rating = EXCLUDED.rider_rating,
     restaurant_rating = EXCLUDED.restaurant_rating,
     restaurant_review = EXCLUDED.restaurant_review,
     timestamp = CURRENT_TIMESTAMP;
-
---name:mark_order_delivered
-UPDATE orders
-SET status = 'delivered',
-    final_timestamp = CURRENT_TIMESTAMP
-WHERE order_id = %s AND username = %s;
-
---name:confirm_order_pickup
-UPDATE orders
-SET status = 'delivering',
-    rider_username = COALESCE(%s, rider_username)
-WHERE order_id = %s;
-
-
-
