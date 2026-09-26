@@ -97,26 +97,8 @@ WHERE order_id = %s AND rider_username = %s AND status = 'pending'
 RETURNING order_id;
 
 --name:settle_rider_delivery
-WITH completed_order AS (
-	UPDATE orders O
-	SET status = 'delivered', final_timestamp = CURRENT_TIMESTAMP
-	WHERE O.order_id = %s AND O.rider_username = %s AND O.status = 'delivering'
-	RETURNING O.order_id, O.cart_id, O.delivery_fee, O.rider_username
-), cash_due AS (
-	SELECT CO.order_id, CO.rider_username, CO.delivery_fee,
-		   COALESCE(SUM(round(round(F.price * (1 - COALESCE(F.discount, 0) / 100.0), 2) * CI.quantity, 2)), 0) + CO.delivery_fee AS total_amount
-	FROM completed_order CO
-	JOIN cart_item CI ON CI.cart_id = CO.cart_id
-	JOIN foods F ON F.food_id = CI.food_id
-	GROUP BY CO.order_id, CO.rider_username, CO.delivery_fee
-)
-UPDATE rider R
-SET due_amount = R.due_amount + D.total_amount,
-	balance = R.balance + D.delivery_fee,
-	status = 'online'
-FROM cash_due D
-WHERE R.username = D.rider_username AND R.status = 'delivering'
-RETURNING D.order_id, D.total_amount, D.delivery_fee;
+CALL settle_rider_delivery_procedure(%s, %s, NULL, NULL);
+
 
 --name:get_rider_history
 SELECT O.order_id, O.bill, O.order_timestamp::text AS order_timestamp,

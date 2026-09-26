@@ -385,3 +385,51 @@ AFTER INSERT OR UPDATE ON email_verification
 FOR EACH ROW
 EXECUTE FUNCTION cleanup_expired_email_verifications();
 
+DROP PROCEDURE IF EXISTS settle_rider_delivery_procedure;
+
+CREATE OR REPLACE PROCEDURE settle_rider_delivery_procedure(
+    IN p_order_id varchar,
+    IN p_rider_username varchar,
+    INOUT delivery_fee numeric DEFAULT NULL,
+    INOUT total_amount numeric DEFAULT NULL
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_cart_id varchar(64);
+    v_delivery_fee numeric(10, 2);
+    v_food_total numeric(10, 2);
+BEGIN
+    UPDATE orders
+    SET status = 'delivered',
+        final_timestamp = CURRENT_TIMESTAMP
+    WHERE order_id = p_order_id
+      AND rider_username = p_rider_username
+      AND status = 'delivering'
+    RETURNING cart_id, orders.delivery_fee INTO v_cart_id, v_delivery_fee;
+
+    IF NOT FOUND THEN
+        delivery_fee := NULL;
+        total_amount := NULL;
+        RETURN;
+    END IF;
+
+    SELECT COALESCE(SUM(ROUND(ROUND(F.price * (1 - COALESCE(F.discount, 0) / 100.0), 2) * CI.quantity, 2)), 0)
+    INTO v_food_total
+    FROM cart_item CI
+    JOIN foods F ON F.food_id = CI.food_id
+    WHERE CI.cart_id = v_cart_id;
+
+    delivery_fee := v_delivery_fee;
+    total_amount := v_food_total + v_delivery_fee;
+
+    UPDATE rider
+    SET due_amount = due_amount + total_amount,
+        balance = balance + delivery_fee,
+        status = 'online'
+    WHERE username = p_rider_username
+      AND status = 'delivering';
+END;
+$$;
+
+

@@ -461,7 +461,7 @@ def _advance_rider_order(order_id, action):
 
             cur.execute(load_query("rider.sql", "settle_rider_delivery"), (order_id, username))
             settlement = cur.fetchone()
-            if not settlement:
+            if not settlement or settlement.get("delivery_fee") is None:
                 return jsonify({"success": False, "message": "Order is not in delivery state or rider is unavailable"}), 409
             conn.commit()
             return jsonify({
