@@ -5,13 +5,20 @@ import requests
 import os
 import json
 
-MAP_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
-map_url = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
-map_headers = {
-    "Content-Type": "application/json",
-    "X-Goog-Api-Key": MAP_API_KEY,
-    "X-Goog-FieldMask": "originIndex,destinationIndex,duration,distanceMeters"
-}
+import time
+import math
+import datetime
+
+GOOGLE_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
+
+
+def get_map_api_key():
+    return os.getenv("GOOGLE_MAPS_API_KEY") or ""
+
+
+_ROUTE_CACHE = {}
+_ROUTE_CACHE_TTL = 300  # Cache route results for 5 minutes
+
 
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 NAME_PATTERN = r"^[A-Za-z\s']+$"
@@ -216,91 +223,152 @@ def getNearbyRestaurants(username, food_cat):
             filtered_restaurants = filterRestaurants(rows, user_location)
             return filtered_restaurants
 
-def getDistanceTime(restaurants, user):
-    origins = []
+def normalize_lat_lon(latitude, longitude):
+    """
+    Ensure latitude and longitude are valid numeric coordinates in correct order.
+    In Postgres/PostGIS: Point(x, y) = Point(longitude, latitude).
+    In Google Maps API: latLng = {latitude: Y, longitude: X}.
+    Latitude must be in [-90, 90], and Longitude in [-180, 180].
+    If coordinates were inadvertently inverted (e.g. latitude > 90 or in Bangladesh
+    where longitude is ~90 and latitude is ~23), safely swap them to the correct order.
+    """
+    try:
+        lat = float(latitude)
+        lon = float(longitude)
+    except (TypeError, ValueError):
+        return None, None
 
-    for restaurant in restaurants:
-        origins.append({
-            "waypoint": {
-                "location": {
-                    "latLng": {
-                        "latitude": restaurant["latitude"],
-                        "longitude": restaurant["longitude"]
-                    }
+    if abs(lat) > 90.0 and abs(lon) <= 90.0:
+        lat, lon = lon, lat
+    elif 85.0 <= lat <= 95.0 and 20.0 <= lon <= 30.0:
+        lat, lon = lon, lat
+
+    return lat, lon
+
+
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """Calculate straight-line aerial distance in meters between two GPS coordinates."""
+    R = 6371000.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    a = math.sin(delta_phi / 2.0)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0)**2
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return R * c
+
+
+def fetch_google_route(origin_lat, origin_lon, dest_lat, dest_lon, travel_mode="TWO_WHEELER"):
+    """
+    Call Google Maps Routes API (computeRoutes) to determine actual route distance and duration.
+    Caches route calls in-memory for 5 minutes.
+    """
+    lat1, lon1 = normalize_lat_lon(origin_lat, origin_lon)
+    lat2, lon2 = normalize_lat_lon(dest_lat, dest_lon)
+    if lat1 is None or lat2 is None:
+        return None
+
+    cache_key = (round(lat1, 5), round(lon1, 5), round(lat2, 5), round(lon2, 5), travel_mode)
+    now = time.time()
+    if cache_key in _ROUTE_CACHE:
+        entry_time, cached_val = _ROUTE_CACHE[cache_key]
+        if now - entry_time < _ROUTE_CACHE_TTL:
+            return cached_val
+
+    api_key = get_map_api_key()
+    if not api_key:
+        return None
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": api_key,
+        "X-Goog-FieldMask": "routes.duration,routes.staticDuration,routes.distanceMeters,routes.description"
+    }
+    body = {
+        "origin": {
+            "location": {
+                "latLng": {
+                    "latitude": lat1,
+                    "longitude": lon1
                 }
             }
-        })
-
-    destination = [{
-        "waypoint": {
+        },
+        "destination": {
             "location": {
-                "latLng": user
+                "latLng": {
+                    "latitude": lat2,
+                    "longitude": lon2
+                }
             }
-        }
-    }]
-
-    data = {
-        "origins": origins,
-        "destinations": destination,
-        "travelMode": "TWO_WHEELER"
+        },
+        "travelMode": travel_mode,
+        "routingPreference": "TRAFFIC_AWARE"
     }
 
-    response = requests.post(
-        map_url,
-        headers=map_headers,
-        json=data
-    )
-    response.raise_for_status()
+    try:
+        resp = requests.post(GOOGLE_ROUTES_URL, headers=headers, json=body, timeout=4)
+        if resp.status_code == 200:
+            routes = resp.json().get("routes", [])
+            if routes:
+                r = routes[0]
+                dist_m = int(r.get("distanceMeters") or 0)
+                dur_str = r.get("duration") or ""
+                dur_s = int(dur_str.rstrip("s")) if dur_str.endswith("s") else 0
+                static_str = r.get("staticDuration") or ""
+                static_s = int(static_str.rstrip("s")) if static_str.endswith("s") else dur_s
+                desc = r.get("description") or ""
 
-    bike_routes = response.text.strip().splitlines()
-    bike_routes = [json.loads(route) for route in bike_routes]
+                result = {
+                    "distance_meters": dist_m,
+                    "duration_seconds": dur_s,
+                    "static_duration_seconds": static_s,
+                    "description": desc
+                }
+                _ROUTE_CACHE[cache_key] = (now, result)
+                return result
+    except Exception:
+        pass
 
-    data["travelMode"] = "BICYCLE"
+    return None
 
-    response = requests.post(
-        map_url,
-        headers=map_headers,
-        json=data
-    )
-    response.raise_for_status()
 
-    bicycle_routes = response.text.strip().splitlines()
-    bicycle_routes = [json.loads(route) for route in bicycle_routes]
+def getDistanceTime(restaurants, user):
+    user_lat, user_lon = normalize_lat_lon(user.get("latitude"), user.get("longitude"))
+    if user_lat is None or user_lon is None:
+        return restaurants
 
-    for route in bike_routes:
-        i = route["originIndex"]
+    for r in restaurants:
+        r_lat, r_lon = normalize_lat_lon(r.get("latitude"), r.get("longitude"))
+        if r_lat is None or r_lon is None:
+            continue
 
-        bike_time = round(
-            int(route["duration"].rstrip("s")) / 60
-        )
-
-        bicycle_route = bicycle_routes[i]
-
-        bicycle_time = round(
-            int(bicycle_route["duration"].rstrip("s")) / 60
-        )
-
-        restaurants[i]["distance"] = route["distanceMeters"]
-
-        restaurants[i]["min_delivery_time"] = min(
-            bike_time,
-            bicycle_time
-        )
-
-        restaurants[i]["max_delivery_time"] = max(
-            bike_time,
-            bicycle_time
-        )
+        route = fetch_google_route(r_lat, r_lon, user_lat, user_lon, travel_mode="TWO_WHEELER")
+        if route:
+            dist_m = route["distance_meters"]
+            bike_time = max(3, round(route["duration_seconds"] / 60.0))
+            bicycle_time = max(4, round((dist_m / 1000.0 / 13.0) * 60))
+            r["distance"] = dist_m
+            r["min_delivery_time"] = min(bike_time, bicycle_time)
+            r["max_delivery_time"] = max(bike_time, bicycle_time)
+        else:
+            dist_m = haversine_distance(r_lat, r_lon, user_lat, user_lon)
+            bike_time = max(4, round((dist_m / 1000.0 / 22.0) * 60))
+            bicycle_time = max(5, round((dist_m / 1000.0 / 13.0) * 60))
+            r["distance"] = round(dist_m)
+            r["min_delivery_time"] = min(bike_time, bicycle_time)
+            r["max_delivery_time"] = max(bike_time, bicycle_time)
 
     return restaurants
+
 
 def filterRestaurants(restaurants, user):
     restaurants = getDistanceTime(restaurants, user)
     restaurants = [
         r for r in restaurants
-        if r["distance"] <= 5000 and r["max_delivery_time"] <= 120
+        if r.get("distance", 0) <= 5000 and r.get("max_delivery_time", 0) <= 120
     ]
     return restaurants
+
 
 def is_valid_food_cat(food_cat):
     with get_connection() as conn:     
@@ -316,117 +384,111 @@ def is_valid_food_cat(food_cat):
     return False
 
 
-import math
-import datetime
-
 def calculate_order_delivery_time(restaurant_coords, user_coords, vehicle="bike"):
     """
-    Calculates delivery time for an order considering:
-    - GPS coordinates of restaurant and delivery destination
-    - Traffic conditions / whether there is a jam
-    - Vehicle type: Motorbike ('bike') vs Bicycle ('bicycle')
-    - Kitchen food preparation time
+    Calculates delivery time and route distance for an order using Google Maps Routes API:
+    - Queries Google Routes API for real road route distance and traffic-aware transit duration
+    - Distinguishes Motorbike (TWO_WHEELER) vs Bicycle
+    - Detects traffic condition from Google API duration vs staticDuration
+    - Adds kitchen food preparation time (12 mins)
+    - Computes estimated arrival / reaching time in Bangladesh local time (UTC+6)
+    - Formats delivery time range (e.g. 20 - 30 mins)
     """
-    rest_lat = float(restaurant_coords.get("latitude") or 23.726154)
-    rest_lon = float(restaurant_coords.get("longitude") or 90.390298)
-    user_lat = float(user_coords.get("latitude") or 23.726154)
-    user_lon = float(user_coords.get("longitude") or 90.390298)
+    rest_lat, rest_lon = normalize_lat_lon(
+        restaurant_coords.get("latitude") if restaurant_coords else None,
+        restaurant_coords.get("longitude") if restaurant_coords else None
+    )
+    user_lat, user_lon = normalize_lat_lon(
+        user_coords.get("latitude") if user_coords else None,
+        user_coords.get("longitude") if user_coords else None
+    )
 
-    # 1. GPS Distance calculation (haversine)
-    R = 6371000.0
-    phi1 = math.radians(rest_lat)
-    phi2 = math.radians(user_lat)
-    delta_phi = math.radians(user_lat - rest_lat)
-    delta_lambda = math.radians(user_lon - rest_lon)
-    a = math.sin(delta_phi / 2.0)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0)**2
-    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
-    dist_m = R * c
-    dist_km = round(dist_m / 1000.0, 2)
+    if rest_lat is None:
+        rest_lat, rest_lon = 23.726154, 90.390298
+    if user_lat is None:
+        user_lat, user_lon = 23.726154, 90.390298
 
     v = (vehicle or "bike").strip().lower()
     is_bike = v in ("bike", "motorcycle", "scooter")
-    travel_mode = "TWO_WHEELER" if is_bike else "BICYCLE"
     v_label = "Motorbike" if is_bike else "Bicycle"
 
-    transit_mins = None
-    traffic_condition = None
-    traffic_jam_detected = False
+    route_info = None
+    if is_bike:
+        route_info = fetch_google_route(rest_lat, rest_lon, user_lat, user_lon, travel_mode="TWO_WHEELER")
+    else:
+        # First attempt BICYCLE travel mode
+        route_info = fetch_google_route(rest_lat, rest_lon, user_lat, user_lon, travel_mode="BICYCLE")
+        # In regions where bicycle routes are not published by Google, fetch road route via TWO_WHEELER
+        if not route_info:
+            tw_route = fetch_google_route(rest_lat, rest_lon, user_lat, user_lon, travel_mode="TWO_WHEELER")
+            if tw_route:
+                road_dist_m = tw_route["distance_meters"]
+                road_dist_km = road_dist_m / 1000.0
+                # Bicycle average city speed ~13 km/h
+                bicycle_mins = max(4, round((road_dist_km / 13.0) * 60))
+                route_info = {
+                    "distance_meters": road_dist_m,
+                    "duration_seconds": bicycle_mins * 60,
+                    "static_duration_seconds": bicycle_mins * 60,
+                    "description": tw_route.get("description", "")
+                }
 
-    # 2. Query Google Maps Routes API if key is present
-    if MAP_API_KEY:
-        try:
-            req_data = {
-                "origins": [{
-                    "waypoint": {
-                        "location": {
-                            "latLng": {"latitude": rest_lat, "longitude": rest_lon}
-                        }
-                    }
-                }],
-                "destinations": [{
-                    "waypoint": {
-                        "location": {
-                            "latLng": {"latitude": user_lat, "longitude": user_lon}
-                        }
-                    }
-                }],
-                "travelMode": travel_mode
-            }
-            resp = requests.post(map_url, headers=map_headers, json=req_data, timeout=3)
-            if resp.status_code == 200:
-                lines = resp.text.strip().splitlines()
-                if lines:
-                    route_info = json.loads(lines[0])
-                    dur_str = route_info.get("duration", "")
-                    if dur_str and dur_str.endswith("s"):
-                        dur_sec = int(dur_str.rstrip("s"))
-                        transit_mins = max(4, round(dur_sec / 60))
-                        expected_mins = max(3, round((dist_km / (24.0 if is_bike else 12.0)) * 60))
-                        if transit_mins >= expected_mins * 1.35:
-                            traffic_condition = "Heavy traffic jam"
-                            traffic_jam_detected = True
-                        elif transit_mins >= expected_mins * 1.15:
-                            traffic_condition = "Moderate traffic"
-                            traffic_jam_detected = True
-                        else:
-                            traffic_condition = "Normal traffic flow"
-        except Exception:
-            transit_mins = None
+    # If Google Maps API returned route info, use the actual route distance & duration
+    if route_info:
+        dist_m = route_info["distance_meters"]
+        dist_km = round(dist_m / 1000.0, 2)
+        dur_sec = route_info["duration_seconds"]
+        static_sec = route_info["static_duration_seconds"]
+        transit_mins = max(3, round(dur_sec / 60.0))
 
-    # 3. Intelligent traffic model fallback
-    utc_now = datetime.datetime.now(datetime.timezone.utc)
-    bd_now = utc_now + datetime.timedelta(hours=6)
-    cur_hour = bd_now.hour + bd_now.minute / 60.0
+        delay_sec = max(0, dur_sec - static_sec)
+        traffic_delay_mins = round(delay_sec / 60.0)
 
-    is_heavy_jam = (8.5 <= cur_hour <= 10.75) or (17.25 <= cur_hour <= 21.5)
-    is_moderate_jam = (11.0 <= cur_hour < 13.5) or (13.5 <= cur_hour <= 15.5) or (15.5 < cur_hour < 17.25)
-
-    if traffic_condition is None:
-        if is_heavy_jam:
+        if dur_sec >= static_sec * 1.30 and delay_sec >= 180:
             traffic_condition = "Heavy traffic jam"
             traffic_jam_detected = True
-        elif is_moderate_jam:
+        elif dur_sec >= static_sec * 1.15 and delay_sec >= 60:
             traffic_condition = "Moderate traffic"
             traffic_jam_detected = True
         else:
             traffic_condition = "Normal traffic flow"
             traffic_jam_detected = False
-
-    if is_bike:
-        base_speed_kmh = 24.0
-        jam_factor = 1.7 if is_heavy_jam else (1.35 if is_moderate_jam else 1.1)
     else:
-        base_speed_kmh = 12.0
-        jam_factor = 1.3 if is_heavy_jam else (1.15 if is_moderate_jam else 1.05)
+        # Graceful fallback: Haversine distance with road tortuosity factor (1.25)
+        straight_m = haversine_distance(rest_lat, rest_lon, user_lat, user_lon)
+        dist_m = round(straight_m * 1.25)
+        dist_km = round(dist_m / 1000.0, 2)
 
-    base_transit_mins = max(3, round((dist_km / base_speed_kmh) * 60))
-    if transit_mins is None:
-        transit_mins = max(4, round(base_transit_mins * jam_factor))
+        utc_now = datetime.datetime.now(datetime.timezone.utc)
+        bd_now = utc_now + datetime.timedelta(hours=6)
+        cur_hour = bd_now.hour + bd_now.minute / 60.0
+        is_heavy_jam = (8.5 <= cur_hour <= 10.75) or (17.25 <= cur_hour <= 21.5)
+        is_moderate_jam = (11.0 <= cur_hour < 13.5) or (13.5 <= cur_hour <= 15.5) or (15.5 < cur_hour < 17.25)
 
-    traffic_delay_mins = max(0, transit_mins - base_transit_mins)
+        if is_heavy_jam:
+            traffic_condition = "Heavy traffic jam"
+            traffic_jam_detected = True
+            jam_factor = 1.6 if is_bike else 1.3
+        elif is_moderate_jam:
+            traffic_condition = "Moderate traffic"
+            traffic_jam_detected = True
+            jam_factor = 1.3 if is_bike else 1.15
+        else:
+            traffic_condition = "Normal traffic flow"
+            traffic_jam_detected = False
+            jam_factor = 1.05
+
+        base_speed = 24.0 if is_bike else 13.0
+        base_transit = max(3, round((dist_km / base_speed) * 60))
+        transit_mins = max(4, round(base_transit * jam_factor))
+        traffic_delay_mins = max(0, transit_mins - base_transit)
+
     kitchen_prep_mins = 12
     total_delivery_mins = kitchen_prep_mins + transit_mins
 
+    # Compute reaching time / arrival time in Bangladesh time (UTC+6)
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
+    bd_now = utc_now + datetime.timedelta(hours=6)
     eta_time = bd_now + datetime.timedelta(minutes=total_delivery_mins)
     eta_str = eta_time.strftime("%I:%M %p").lstrip("0")
 
@@ -438,15 +500,17 @@ def calculate_order_delivery_time(restaurant_coords, user_coords, vehicle="bike"
         "delivery_time_range": f"{min_range} - {max_range} mins",
         "estimated_arrival_time": eta_str,
         "distance_km": dist_km,
-        "distance_meters": round(dist_m),
+        "distance_meters": dist_m,
         "vehicle": "bike" if is_bike else "bicycle",
         "vehicle_label": v_label,
         "traffic_condition": traffic_condition,
         "traffic_jam_detected": traffic_jam_detected,
         "traffic_delay_mins": traffic_delay_mins,
         "kitchen_prep_mins": kitchen_prep_mins,
-        "transit_mins": transit_mins
+        "transit_mins": transit_mins,
+        "route_description": route_info.get("description", "") if route_info else ""
     }
+
 
 
 def calculate_delivery_charge(distance_km, estimated_delivery_mins):

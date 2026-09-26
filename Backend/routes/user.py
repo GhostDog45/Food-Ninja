@@ -89,17 +89,30 @@ def get_nearby_restaurants():
                 for r in rows:
                     dist_m = float(r.get("distance_meters") or 0.0)
                     r_status = (r.get("status") or "closed").strip().lower()
+                    r_lat = float(r["latitude"]) if r.get("latitude") is not None else None
+                    r_lon = float(r["longitude"]) if r.get("longitude") is not None else None
+
+                    deliv_time_mins = int(15 + round(dist_m / 200))
+                    if r_lat is not None and r_lon is not None and user_lat is not None and user_lon is not None:
+                        est = calculate_order_delivery_time(
+                            {"latitude": r_lat, "longitude": r_lon},
+                            {"latitude": user_lat, "longitude": user_lon},
+                            vehicle="bike"
+                        )
+                        deliv_time_mins = est["estimated_delivery_mins"]
+                        dist_m = float(est["distance_meters"])
+
                     restaurants.append({
                         "restaurant_id": r["restaurant_id"],
                         "name": r["name"],
-                        "latitude": float(r["latitude"]) if r.get("latitude") is not None else None,
-                        "longitude": float(r["longitude"]) if r.get("longitude") is not None else None,
+                        "latitude": r_lat,
+                        "longitude": r_lon,
                         "open_time": str(r["open_time"]) if r.get("open_time") else None,
                         "close_time": str(r["close_time"]) if r.get("close_time") else None,
                         "status": r_status,
                         "distance_meters": dist_m,
                         "distance_km": round(dist_m / 1000.0, 2),
-                        "delivery_time_mins": int(15 + round(dist_m / 200)),
+                        "delivery_time_mins": deliv_time_mins,
                         "rating": float(r.get("avg_rating") or 0.0),
                         "review_count": int(r.get("review_count") or 0),
                         "people_ordered_count": int(r.get("people_ordered_count") or 0),
