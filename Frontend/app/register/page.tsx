@@ -185,12 +185,16 @@ function RegisterContent() {
     }
     setSendingVerification(true);
     try {
-      await apiSendEmailVerification(cleanEmail);
+      const res = await apiSendEmailVerification(cleanEmail);
       setVerificationSentFor(cleanEmail);
-      setEmailVerificationCode("");
       setIsEmailVerified(false);
       setResendCountdown(60);
-      toast("Verification code sent. It expires in 10 minutes.", "success");
+      if (res.dev_code) {
+        setEmailVerificationCode(res.dev_code);
+        toast(`Code ${res.dev_code} auto-filled (Render free tier SMTP notice)`, "warning");
+      } else {
+        toast("Verification code sent. It expires in 10 minutes.", "success");
+      }
     } catch (error) {
       toast(error instanceof Error ? error.message : "Could not send verification code", "danger");
     } finally {

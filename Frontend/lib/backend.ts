@@ -138,6 +138,20 @@ export function clearAuthSession(): void {
   sessionStorage.removeItem("food_ninja_user");
 }
 
+async function safeJsonParse<T = any>(res: Response, defaultMessage = "Request failed"): Promise<T> {
+  const contentType = res.headers.get("content-type") || "";
+  if (res.status === 404) {
+    throw new Error(
+      `Backend endpoint not found (HTTP 404). The frontend is currently sending requests to: '${BACKEND_URL}'. Please update NEXT_PUBLIC_BACKEND_URL in your Render Frontend settings with your real backend URL.`
+    );
+  }
+  if (!contentType.includes("application/json")) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text ? `Server error (${res.status}): ${text.slice(0, 120)}` : defaultMessage);
+  }
+  return await res.json();
+}
+
 // Direct API calls to Flask Backend matching login.py exactly
 export async function apiLogin(payload: LoginPayload): Promise<LoginResponse> {
   let res: Response;
@@ -149,13 +163,15 @@ export async function apiLogin(payload: LoginPayload): Promise<LoginResponse> {
       },
       body: JSON.stringify(payload),
     });
-  } catch {
+  } catch (err: any) {
     throw new Error(
-      "Backend server is offline or unreachable. Please ensure 'python app.py' is running in D:\\project\\Food-Ninja\\Backend."
+      err?.message?.includes("Backend endpoint not found")
+        ? err.message
+        : `Backend server at ${BACKEND_URL} is offline or waking up. Please allow ~30 seconds for Render free tier to spin up.`
     );
   }
 
-  const data = await res.json();
+  const data = await safeJsonParse(res, "Failed to log in");
   if (!res.ok || !data.success) {
     throw new Error(data.message || "Failed to log in");
   }
@@ -201,13 +217,15 @@ export async function apiRegister(payload: RegisterPayload): Promise<RegisterRes
       },
       body: JSON.stringify(payload),
     });
-  } catch {
+  } catch (err: any) {
     throw new Error(
-      "Cannot connect to the Flask Backend. Please ensure 'python app.py' is running on http://127.0.0.1:5000 in your Backend terminal."
+      err?.message?.includes("Backend endpoint not found")
+        ? err.message
+        : `Cannot connect to Backend at ${BACKEND_URL}. If on Render free tier, server may be spinning up.`
     );
   }
 
-  const data = await res.json();
+  const data = await safeJsonParse(res, "Failed to register");
   if (!res.ok || !data.success) {
     throw new Error(data.message || "Failed to register");
   }
@@ -215,24 +233,42 @@ export async function apiRegister(payload: RegisterPayload): Promise<RegisterRes
   return data;
 }
 
-export async function apiSendEmailVerification(email: string): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`${BACKEND_URL}/verify-email/send`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  const data = await res.json();
+export async function apiSendEmailVerification(email: string): Promise<{ success: boolean; message: string; dev_code?: string }> {
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND_URL}/verify-email/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+  } catch (err: any) {
+    throw new Error(
+      err?.message?.includes("Backend endpoint not found")
+        ? err.message
+        : `Cannot connect to Backend at ${BACKEND_URL}. Backend may still be spinning up.`
+    );
+  }
+  const data = await safeJsonParse(res, "Failed to send verification code");
   if (!res.ok || !data.success) throw new Error(data.message || "Failed to send verification code");
   return data;
 }
 
 export async function apiVerifyEmail(email: string, code: string, consume = false): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`${BACKEND_URL}/verify-email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: email.trim().toLowerCase(), code: code.trim(), consume }),
-  });
-  const data = await res.json();
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND_URL}/verify-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim().toLowerCase(), code: code.trim(), consume }),
+    });
+  } catch (err: any) {
+    throw new Error(
+      err?.message?.includes("Backend endpoint not found")
+        ? err.message
+        : `Cannot connect to Backend at ${BACKEND_URL}.`
+    );
+  }
+  const data = await safeJsonParse(res, "Email verification failed");
   if (!res.ok || !data.success) throw new Error(data.message || "Email verification failed");
   return data;
 }
