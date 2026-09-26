@@ -21,6 +21,8 @@ else:
     load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 if not DATABASE_URL:
     print(
@@ -41,6 +43,8 @@ pool = ConnectionPool(
     conninfo=DATABASE_URL or "postgresql://localhost",
     min_size=1,
     max_size=10,
+    check=ConnectionPool.check_connection,
+    max_idle=300.0,
     open=True if DATABASE_URL else False,
     kwargs={"row_factory": dict_row}
 )

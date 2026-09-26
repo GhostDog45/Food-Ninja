@@ -5,6 +5,23 @@
 .env.production
 .env.development
 
-# Python bytecode
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Node & Next.js
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

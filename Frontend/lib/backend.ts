@@ -85,7 +85,16 @@ export type UpdateResponse = {
   message: string;
 };
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:5000";
+function normalizeBackendUrl(url?: string): string {
+  let u = (url || "http://127.0.0.1:5000").trim();
+  if (!/^https?:\/\//i.test(u)) {
+    u = `https://${u}`;
+  }
+  return u.replace(/\/+$/, "");
+}
+
+export const BACKEND_URL = normalizeBackendUrl(process.env.NEXT_PUBLIC_BACKEND_URL);
+export const BACKEND_WS_URL = BACKEND_URL.replace(/^http/, "ws");
 
 export function getImageUrl(url?: string | null, fallback = "/placeholder-food.png"): string {
   if (!url || typeof url !== "string" || !url.trim()) return fallback;

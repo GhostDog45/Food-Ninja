@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAuthToken } from "@/lib/backend";
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:5000";
+import { getAuthToken, BACKEND_WS_URL } from "@/lib/backend";
 
 type Props = { onConnected: (connected: boolean) => void; onCoordinates?: (lat: number, lng: number) => void };
 
@@ -49,7 +47,7 @@ export function RiderLiveLocation({ onConnected, onCoordinates }: Props) {
 
     const connect = () => {
       if (!alive) return;
-      const wsUrl = BACKEND_URL.replace(/^http/, "ws") + "/rider/location/live";
+      const wsUrl = `${BACKEND_WS_URL}/rider/location/live`;
       socket = new WebSocket(wsUrl);
       socket.onopen = () => {
       socket?.send(JSON.stringify({ type: "auth", token }));

@@ -1,0 +1,53 @@
+services:
+  # ----------------------------------------------------
+  # 1. Food Ninja Backend API (Python / Flask + Gunicorn)
+  # ----------------------------------------------------
+  - type: web
+    name: food-ninja-backend
+    runtime: python
+    rootDir: Backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -b 0.0.0.0:$PORT --workers 1 --threads 50 wsgi:app
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: admin_invitation_code
+        sync: false
+      - key: BREVO_SMTP_HOST
+        value: smtp-relay.brevo.com
+      - key: BREVO_SMTP_PORT
+        value: "587"
+      - key: BREVO_SMTP_LOGIN
+        sync: false
+      - key: BREVO_SMTP_PASSWORD
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
+        value: Food-Ninja
+
+  # ----------------------------------------------------
+  # 2. Food Ninja Frontend (Node.js / Next.js)
+  # ----------------------------------------------------
+  - type: web
+    name: food-ninja-frontend
+    runtime: node
+    rootDir: Frontend
+    plan: free
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: NEXT_PUBLIC_BACKEND_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false

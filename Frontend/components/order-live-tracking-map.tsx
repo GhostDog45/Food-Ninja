@@ -2,9 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
-import { getAuthToken, apiGetOrderRiderLocation, type RiderLiveLocationData } from "@/lib/backend";
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:5000";
+import { getAuthToken, apiGetOrderRiderLocation, BACKEND_URL, BACKEND_WS_URL, type RiderLiveLocationData } from "@/lib/backend";
 
 type OrderLiveTrackingMapProps = {
   orderId: string;
@@ -216,7 +214,7 @@ export function OrderLiveTrackingMap({
     // B. Realtime WebSocket Stream from Backend
     const token = getAuthToken();
     if (token) {
-      const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/orders/${orderId}/live_location`;
+      const wsUrl = `${BACKEND_WS_URL}/orders/${orderId}/live_location`;
       try {
         socket = new WebSocket(wsUrl);
 
