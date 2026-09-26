@@ -867,6 +867,88 @@ def get_order_detail(order_id):
         return jsonify({"success": False, "message": str(e)}), 500
 
 
+@user_bp.route("/user/orders/<order_id>/rider_location", methods=["GET"])
+def get_order_rider_live_location(order_id):
+    payload, err = _get_authenticated_user()
+    if err:
+        return err
+
+    username = payload.get("username")
+    clean_id = (order_id or "").strip()
+
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT O.order_id, O.status, O.rider_username,
+                       ST_Y(O.location::geometry) AS customer_latitude,
+                       ST_X(O.location::geometry) AS customer_longitude,
+                       R.name AS restaurant_name,
+                       ST_Y(R.location::geometry) AS restaurant_latitude,
+                       ST_X(R.location::geometry) AS restaurant_longitude,
+                       RD.name AS rider_name, RD.phone AS rider_phone, RD.vehicle AS rider_vehicle
+                FROM orders O
+                JOIN cart C ON C.cart_id = O.cart_id
+                JOIN restaurant R ON R.restaurant_id = C.restaurant_id
+                LEFT JOIN rider RD ON RD.username = O.rider_username
+                WHERE (O.order_id = %s OR LOWER(O.order_id) = LOWER(%s)) AND LOWER(O.username) = LOWER(%s)
+                """,
+                (clean_id, clean_id, username)
+            )
+            order_row = cur.fetchone()
+
+            if not order_row:
+                return jsonify({"success": False, "message": "Order not found"}), 404
+
+            # Access restriction: Customer can ONLY see the live location while order is in 'delivering' status
+            if order_row["status"] != "delivering":
+                return jsonify({
+                    "success": False,
+                    "active": False,
+                    "status": order_row["status"],
+                    "message": "Live rider location is only accessible when the order is actively delivering."
+                }), 403
+
+            rider_username = order_row.get("rider_username")
+            if not rider_username:
+                return jsonify({
+                    "success": False,
+                    "active": False,
+                    "status": "delivering",
+                    "message": "Rider has not yet been assigned."
+                }), 200
+
+            from routes.rider import get_live_location
+            loc = get_live_location(rider_username)
+
+            return jsonify({
+                "success": True,
+                "active": True,
+                "status": "delivering",
+                "order_id": order_row["order_id"],
+                "rider": {
+                    "username": rider_username,
+                    "name": order_row.get("rider_name"),
+                    "phone": order_row.get("rider_phone"),
+                    "vehicle": order_row.get("rider_vehicle") or "bike",
+                    "latitude": loc["latitude"] if loc else None,
+                    "longitude": loc["longitude"] if loc else None,
+                    "updated_at": loc.get("updated_at") if loc else None
+                },
+                "customer_location": {
+                    "latitude": float(order_row["customer_latitude"]) if order_row.get("customer_latitude") is not None else None,
+                    "longitude": float(order_row["customer_longitude"]) if order_row.get("customer_longitude") is not None else None
+                },
+                "restaurant_location": {
+                    "name": order_row.get("restaurant_name"),
+                    "latitude": float(order_row["restaurant_latitude"]) if order_row.get("restaurant_latitude") is not None else None,
+                    "longitude": float(order_row["restaurant_longitude"]) if order_row.get("restaurant_longitude") is not None else None
+                }
+            }), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 @user_bp.route("/user/orders/<order_id>/complete", methods=["POST"])
 def complete_order(order_id):
     payload, err = _get_authenticated_user()

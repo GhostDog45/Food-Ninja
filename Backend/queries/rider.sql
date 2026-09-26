@@ -128,3 +128,9 @@ JOIN restaurant R ON R.restaurant_id = C.restaurant_id
 WHERE O.rider_username = %s AND O.status = 'delivered'
 ORDER BY O.final_timestamp DESC
 LIMIT 100;
+
+--name:update_rider_vehicle
+UPDATE rider
+SET vehicle = %s
+WHERE username = %s
+RETURNING vehicle;

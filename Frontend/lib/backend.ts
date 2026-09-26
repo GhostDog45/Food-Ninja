@@ -1091,6 +1091,8 @@ export type CustomerOrder = {
   transaction_id: string;
   restaurant_id: string;
   restaurant_name: string;
+  restaurant_latitude?: number | null;
+  restaurant_longitude?: number | null;
   latitude: number | null;
   longitude: number | null;
   distance_meters?: number;
@@ -1339,6 +1341,43 @@ export async function apiGetUserOrderDetail(orderId: string): Promise<CustomerOr
   return data.order;
 }
 
+export type RiderLiveLocationData = {
+  success: boolean;
+  active: boolean;
+  status: string;
+  order_id?: string;
+  rider?: {
+    username: string;
+    name?: string;
+    phone?: string;
+    vehicle?: string;
+    latitude: number | null;
+    longitude: number | null;
+    updated_at?: number;
+  };
+  customer_location?: {
+    latitude: number | null;
+    longitude: number | null;
+  };
+  restaurant_location?: {
+    name: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  message?: string;
+};
+
+export async function apiGetOrderRiderLocation(orderId: string): Promise<RiderLiveLocationData> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/user/orders/${encodeURIComponent(orderId)}/rider_location`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  return data;
+}
+
 export async function apiSubmitOrderReview(
   orderId: string,
   payload: {
@@ -1533,6 +1572,28 @@ export async function apiUploadRiderPfp(file: File): Promise<{ success: boolean;
 
   const data = await res.json();
   if (!res.ok || !data.success) throw new Error(data.message || "Failed to upload rider profile picture");
+  return data;
+}
+
+export async function apiUpdateRiderVehicle(
+  vehicle: "bike" | "bicycle"
+): Promise<{ success: boolean; message: string; vehicle: "bike" | "bicycle" }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/rider/me/vehicle`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ vehicle }),
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || "Failed to update vehicle");
+  }
   return data;
 }
 

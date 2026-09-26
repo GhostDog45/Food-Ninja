@@ -10,6 +10,7 @@ import {
   apiGetRiderProfile,
   apiUploadRiderPfp,
   apiUpdateLocation,
+  apiUpdateRiderVehicle,
   getImageUrl,
   type RiderProfile,
 } from "@/lib/backend";
@@ -28,6 +29,9 @@ export default function RiderProfilePage() {
   const [tempLng, setTempLng] = useState(90.4078);
   const [tempAddress, setTempAddress] = useState("Gulshan 2, Dhaka");
 
+  // Vehicle state
+  const [isUpdatingVehicle, setIsUpdatingVehicle] = useState(false);
+
   async function loadProfile() {
     try {
       setLoading(true);
@@ -41,6 +45,19 @@ export default function RiderProfilePage() {
       toast(err.message || "Failed to load rider profile", "danger");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleUpdateVehicle(newVehicle: "bike" | "bicycle") {
+    setIsUpdatingVehicle(true);
+    try {
+      const res = await apiUpdateRiderVehicle(newVehicle);
+      setProfile((prev) => (prev ? { ...prev, vehicle: res.vehicle } : null));
+      toast(res.message || "Vehicle updated successfully!", "success");
+    } catch (err: any) {
+      toast(err.message || "Failed to update vehicle", "danger");
+    } finally {
+      setIsUpdatingVehicle(false);
     }
   }
 
@@ -311,11 +328,52 @@ export default function RiderProfilePage() {
                 <p className="text-sm font-semibold text-slate-900">{profile?.phone || "—"}</p>
               </div>
 
-              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 block">Assigned Vehicle</span>
-                <p className="text-sm font-semibold text-amber-700 capitalize">
-                  {profile?.vehicle === "bike" ? "🏍️ Motorcycle" : "🚴 Bicycle"}
-                </p>
+              <div className="rounded-2xl border border-amber-200/80 bg-amber-50/40 p-4 space-y-2.5 sm:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-amber-900 block">
+                      Assigned Vehicle
+                    </span>
+                    <p className="text-[11px] text-slate-500">
+                      Switching your vehicle updates your profile in the database and recalibrates transit speeds (Motorcycle: 30 km/h, Bicycle: 16 km/h).
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold text-amber-800 bg-amber-100/80 border border-amber-300/60 px-3 py-1 rounded-full">
+                    Active: {profile?.vehicle === "bike" ? "🏍️ Motorcycle" : "🚴 Bicycle"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    disabled={isUpdatingVehicle || profile?.vehicle === "bike"}
+                    onClick={() => handleUpdateVehicle("bike")}
+                    className={`flex items-center justify-center gap-2 rounded-xl p-3 text-xs font-bold transition border ${
+                      profile?.vehicle === "bike"
+                        ? "border-amber-500 bg-amber-500 text-white shadow-xs"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50"
+                    } disabled:opacity-85`}
+                  >
+                    <span className="text-base">🏍️</span>
+                    <span>Motorcycle (Bike)</span>
+                    {profile?.vehicle === "bike" && <span>✓</span>}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isUpdatingVehicle || profile?.vehicle === "bicycle"}
+                    onClick={() => handleUpdateVehicle("bicycle")}
+                    className={`flex items-center justify-center gap-2 rounded-xl p-3 text-xs font-bold transition border ${
+                      profile?.vehicle === "bicycle"
+                        ? "border-amber-500 bg-amber-500 text-white shadow-xs"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50"
+                    } disabled:opacity-85`}
+                  >
+                    <span className="text-base">🚴</span>
+                    <span>Bicycle</span>
+                    {profile?.vehicle === "bicycle" && <span>✓</span>}
+                  </button>
+                </div>
               </div>
 
               <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">

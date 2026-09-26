@@ -8,12 +8,21 @@ import { Badge, Panel, SectionHeading } from "@/components/ui";
 import { customerNav } from "@/lib/platform";
 import { apiGetUserOrderDetail, type CustomerOrder } from "@/lib/backend";
 import { CustomerAccessGuard } from "@/components/customer-access-guard";
+import { OrderLiveTrackingMap } from "@/components/order-live-tracking-map";
 
 export default function OrderTrackingPage() {
   const params = useParams<{ id: string }>();
   const [order, setOrder] = useState<CustomerOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const refreshOrder = () => {
+    const rawId = params?.id;
+    if (!rawId) return;
+    apiGetUserOrderDetail(rawId)
+      .then((data) => setOrder(data))
+      .catch(() => {});
+  };
 
   useEffect(() => {
     const rawId = params?.id;
@@ -141,6 +150,32 @@ export default function OrderTrackingPage() {
                       );
                     })}
                   </ol>
+                </div>
+              )}
+
+              {/* Realtime OSM Live Delivery Tracking Map */}
+              {(active || order.status === "delivered") && (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Live Delivery Route (OpenStreetMap)
+                  </p>
+                  <OrderLiveTrackingMap
+                    orderId={order.order_id}
+                    orderStatus={order.status}
+                    customerLat={order.latitude}
+                    customerLng={order.longitude}
+                    restaurantLat={order.restaurant_latitude}
+                    restaurantLng={order.restaurant_longitude}
+                    restaurantName={order.restaurant_name}
+                    riderName={order.rider_name}
+                    riderPhone={order.rider_phone}
+                    riderVehicle={order.rider_vehicle}
+                    onStatusChange={(newStatus) => {
+                      if (newStatus !== order.status) {
+                        refreshOrder();
+                      }
+                    }}
+                  />
                 </div>
               )}
 
