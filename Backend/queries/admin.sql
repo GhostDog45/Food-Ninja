@@ -185,22 +185,65 @@ LEFT JOIN restaurant_owner O ON O.owner_id = R.owner_id
 WHERE R.restaurant_id = %s;
 
 --name:get_admin_restaurant_foods
-SELECT food_id, restaurant_id, category, name, price, discount, description, subcategory
+SELECT food_id, restaurant_id, category, name, price, discount, description, picture_url, subcategory
 FROM foods
 WHERE restaurant_id = %s
 ORDER BY subcategory NULLS FIRST, category ASC, name ASC;
+
+--name:get_admin_restaurant_orders
+SELECT O.order_id, O.status, O.order_timestamp::text AS order_timestamp,
+       O.final_timestamp::text AS final_timestamp, O.bill, U.username,
+       U.name AS customer_name, RD.username AS rider_username, RD.name AS rider_name
+FROM orders O
+JOIN cart C ON C.cart_id = O.cart_id
+JOIN users U ON U.username = O.username
+LEFT JOIN rider RD ON RD.username = O.rider_username
+WHERE C.restaurant_id = %s
+ORDER BY CASE WHEN O.status IN ('pending', 'delivering') THEN 0 ELSE 1 END,
+         O.order_timestamp DESC;
 
 --name:get_admin_user_details
 SELECT username, name, email, phone, pfp_url AS pfp, location, status, reg_date
 FROM users WHERE username = %s;
 
+--name:get_admin_user_orders
+SELECT O.order_id, O.status, O.order_timestamp::text AS order_timestamp,
+       O.final_timestamp::text AS final_timestamp, O.bill,
+       R.restaurant_id, R.name AS restaurant_name, RD.username AS rider_username,
+       RD.name AS rider_name
+FROM orders O
+JOIN cart C ON C.cart_id = O.cart_id
+JOIN restaurant R ON R.restaurant_id = C.restaurant_id
+LEFT JOIN rider RD ON RD.username = O.rider_username
+WHERE LOWER(O.username) = LOWER(%s)
+ORDER BY CASE WHEN O.status IN ('pending', 'delivering') THEN 0 ELSE 1 END,
+         O.order_timestamp DESC;
+
 --name:get_admin_rider_details
-SELECT username, name, email, phone, vehicle, location, balance, pfp_url AS pfp, status, reg_date
+SELECT username, name, email, phone, vehicle, location, balance, due_amount, pfp_url AS pfp, status, reg_date
 FROM rider WHERE username = %s;
+
+--name:get_admin_rider_orders
+SELECT O.order_id, O.status, O.order_timestamp::text AS order_timestamp,
+       O.final_timestamp::text AS final_timestamp, O.bill,
+       R.restaurant_id, R.name AS restaurant_name, U.username, U.name AS customer_name
+FROM orders O
+JOIN cart C ON C.cart_id = O.cart_id
+JOIN restaurant R ON R.restaurant_id = C.restaurant_id
+JOIN users U ON U.username = O.username
+WHERE LOWER(O.rider_username) = LOWER(%s)
+ORDER BY CASE WHEN O.status IN ('pending', 'delivering') THEN 0 ELSE 1 END,
+         O.order_timestamp DESC;
 
 --name:get_admin_owner_details
 SELECT owner_id, name, phone, email, nid, status
 FROM restaurant_owner WHERE owner_id = %s;
+
+--name:get_admin_owner_restaurants
+SELECT restaurant_id, name, status, open_time::text AS open_time, close_time::text AS close_time
+FROM restaurant
+WHERE owner_id = %s
+ORDER BY name ASC;
 
 --name:get_admin_admin_details
 SELECT username, email, phone, status
@@ -210,3 +253,62 @@ FROM admin WHERE username = %s;
 UPDATE users
 SET status = %s
 WHERE username = %s;
+
+--name:adjust_rider_amounts
+UPDATE rider
+SET due_amount = due_amount - %s,
+        balance = balance - %s
+WHERE username = %s
+    AND %s >= 0 AND %s >= 0
+    AND %s <= due_amount
+    AND %s <= balance
+RETURNING due_amount, balance;
+
+--name:get_admin_order
+SELECT O.order_id, O.username, U.name AS customer_name, O.rider_username,
+             RD.name AS rider_name, O.status, O.bill, O.order_timestamp::text AS order_timestamp,
+             O.final_timestamp::text AS final_timestamp, R.restaurant_id, R.name AS restaurant_name,
+             ST_Y(O.location::geometry) AS latitude, ST_X(O.location::geometry) AS longitude,
+             P.payment_method, P.payment_status, P.transaction_id
+FROM orders O
+JOIN users U ON U.username = O.username
+JOIN cart C ON C.cart_id = O.cart_id
+JOIN restaurant R ON R.restaurant_id = C.restaurant_id
+LEFT JOIN rider RD ON RD.username = O.rider_username
+LEFT JOIN LATERAL (
+        SELECT payment_method, status AS payment_status, transaction_id
+        FROM payment WHERE order_id = O.order_id
+) P ON TRUE
+WHERE LOWER(O.order_id) = LOWER(%s);
+
+--name:get_admin_order_items
+SELECT F.food_id, F.name, F.price, F.discount,
+             round(round(F.price * (1 - COALESCE(F.discount, 0) / 100.0), 2) * CI.quantity, 2) AS item_total,
+             CI.quantity, F.picture_url
+FROM orders O
+JOIN cart_item CI ON CI.cart_id = O.cart_id
+JOIN foods F ON F.food_id = CI.food_id
+WHERE O.order_id = %s
+ORDER BY F.name ASC;
+
+--name:cancel_admin_order
+WITH cancelled AS (
+        UPDATE orders
+        SET status = 'cancelled', final_timestamp = CURRENT_TIMESTAMP
+        WHERE LOWER(order_id) = LOWER(%s)
+            AND status IN ('pending', 'delivering')
+        RETURNING order_id, rider_username
+), released AS (
+        UPDATE rider R
+        SET status = 'online'
+        FROM cancelled C
+        WHERE R.username = C.rider_username AND R.status = 'delivering'
+        RETURNING R.username
+)
+SELECT order_id FROM cancelled;
+
+--name:insert_food_category
+INSERT INTO food_category (category, picture_url)
+VALUES (%s, %s)
+ON CONFLICT (category) DO UPDATE SET picture_url = EXCLUDED.picture_url
+RETURNING category, picture_url;

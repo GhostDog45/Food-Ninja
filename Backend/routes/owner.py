@@ -393,7 +393,7 @@ def owner_cancel_pending_order(restaurant_id, order_id):
         with get_connection() as conn, conn.cursor() as cur:
             cur.execute(load_query("owner.sql", "reject_owner_pending_order"), (order_id, restaurant_id, payload["username"]))
             if cur.rowcount == 0:
-                return jsonify({"success": False, "message": "Pending order not found"}), 404
+                return jsonify({"success": False, "message": "Order is not pending, already assigned to a rider, or not owned by you"}), 409
             conn.commit()
             return jsonify({"success": True, "message": "Order rejected"}), 200
     except psycopg.Error:

@@ -202,7 +202,9 @@ def admin_restaurant_detail(restaurant_id):
             if not restaurant:
                 return jsonify({"success": False, "message": "Restaurant not found"}), 404
             cur.execute(load_query("admin.sql", "get_admin_restaurant_foods"), (restaurant_id,))
-            return jsonify({"success": True, "restaurant": restaurant, "foods": cur.fetchall() or []}), 200
+            foods = cur.fetchall() or []
+            cur.execute(load_query("admin.sql", "get_admin_restaurant_orders"), (restaurant_id,))
+            return jsonify({"success": True, "restaurant": restaurant, "foods": foods, "orders": cur.fetchall() or []}), 200
     except psycopg.Error:
         return jsonify({"success": False, "message": "Database error"}), 500
 
@@ -227,7 +229,77 @@ def admin_profile_detail(resource, identifier):
             profile = cur.fetchone()
             if not profile:
                 return jsonify({"success": False, "message": "Profile not found"}), 404
-            return jsonify({"success": True, "profile": profile}), 200
+            orders = []
+            restaurants = []
+            if resource in ("users", "riders"):
+                query = "get_admin_user_orders" if resource == "users" else "get_admin_rider_orders"
+                cur.execute(load_query("admin.sql", query), (identifier,))
+                orders = cur.fetchall() or []
+            if resource == "owners":
+                cur.execute(load_query("admin.sql", "get_admin_owner_restaurants"), (identifier,))
+                restaurants = cur.fetchall() or []
+            return jsonify({"success": True, "profile": profile, "orders": orders, "restaurants": restaurants}), 200
+    except psycopg.Error:
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+
+@admin_bp.get("/admin/orders/<order_id>")
+def admin_get_order(order_id):
+    _, error = approved_admin_required()
+    if error:
+        return error
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(load_query("admin.sql", "get_admin_order"), (order_id.strip(),))
+            order = cur.fetchone()
+            if not order:
+                return jsonify({"success": False, "message": "Order not found"}), 404
+            cur.execute(load_query("admin.sql", "get_admin_order_items"), (order["order_id"],))
+            return jsonify({"success": True, "order": order, "items": cur.fetchall() or []}), 200
+    except psycopg.Error:
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+
+@admin_bp.post("/admin/orders/<order_id>/cancel")
+def admin_cancel_order(order_id):
+    _, error = approved_admin_required()
+    if error:
+        return error
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(load_query("admin.sql", "cancel_admin_order"), (order_id.strip(),))
+            if not cur.fetchone():
+                return jsonify({"success": False, "message": "Only pending or delivering orders can be cancelled"}), 409
+            conn.commit()
+            return jsonify({"success": True, "message": "Order cancelled"}), 200
+    except psycopg.Error:
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+
+@admin_bp.post("/admin/riders/<username>/amounts")
+def admin_adjust_rider_amounts(username):
+    _, error = approved_admin_required()
+    if error:
+        return error
+    data = request.get_json() or {}
+    due_paid = data.get("due_paid")
+    withdrawal = data.get("withdrawal")
+    try:
+        due_paid = float(due_paid)
+        withdrawal = float(withdrawal)
+        if not all(map(lambda value: value >= 0 and value < float("inf"), (due_paid, withdrawal))):
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "Amounts must be finite non-negative numbers"}), 400
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(load_query("admin.sql", "adjust_rider_amounts"),
+                        (due_paid, withdrawal, username, due_paid, withdrawal, due_paid, withdrawal))
+            balances = cur.fetchone()
+            if not balances:
+                return jsonify({"success": False, "message": "Rider not found or an amount exceeds the current balance"}), 409
+            conn.commit()
+            return jsonify({"success": True, "due_amount": float(balances["due_amount"]), "balance": float(balances["balance"])}), 200
     except psycopg.Error:
         return jsonify({"success": False, "message": "Database error"}), 500
 

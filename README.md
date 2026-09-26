@@ -19,36 +19,36 @@ A modern, high-performance full-stack food delivery platform built to handle rea
 
 ### Production Dependencies (`Frontend/package.json`)
 
-| Package | Version | Purpose |
-| :--- | :--- | :--- |
-| **`next`** | `16.3.0` | React framework for server-side rendering, App Router, and API routes |
-| **`react`** | `19.2.8` | Core UI library for component-based interface rendering |
-| **`react-dom`** | `19.2.8` | DOM renderer for React |
-| **`pg`** | `^8.23.0` | PostgreSQL client for Node.js to connect to Postgres / Neon databases |
-| **`leaflet`** | `^1.9.4` | Interactive maps for location picking and rider tracking |
+| Package         | Version   | Purpose                                                               |
+| :-------------- | :-------- | :-------------------------------------------------------------------- |
+| **`next`**      | `16.3.0`  | React framework for server-side rendering, App Router, and API routes |
+| **`react`**     | `19.2.8`  | Core UI library for component-based interface rendering               |
+| **`react-dom`** | `19.2.8`  | DOM renderer for React                                                |
+| **`pg`**        | `^8.23.0` | PostgreSQL client for Node.js to connect to Postgres / Neon databases |
+| **`leaflet`**   | `^1.9.4`  | Interactive maps for location picking and rider tracking              |
 
 ### Development Dependencies (`Frontend/package.json`)
 
-| Package | Version | Purpose |
-| :--- | :--- | :--- |
-| **`typescript`** | `^5` | Type safety and static analysis across the application |
-| **`tailwindcss`** | `^4` | Utility-first CSS framework for modern, responsive UI design |
-| **`@tailwindcss/postcss`** | `^4` | PostCSS plugin integration for Tailwind CSS v4 |
-| **`eslint`** | `^9` | Code linting and static analysis |
-| **`eslint-config-next`** | `16.3.0` | Next.js-specific ESLint rules and configurations |
-| **`@types/node`** | `^20` | TypeScript definitions for Node.js runtime APIs |
-| **`@types/react`** | `^19` | TypeScript definitions for React 19 |
-| **`@types/react-dom`** | `^19` | TypeScript definitions for React 19 DOM |
-| **`@types/pg`** | `^8.21.0` | TypeScript definitions for Node PostgreSQL client |
+| Package                    | Version   | Purpose                                                      |
+| :------------------------- | :-------- | :----------------------------------------------------------- |
+| **`typescript`**           | `^5`      | Type safety and static analysis across the application       |
+| **`tailwindcss`**          | `^4`      | Utility-first CSS framework for modern, responsive UI design |
+| **`@tailwindcss/postcss`** | `^4`      | PostCSS plugin integration for Tailwind CSS v4               |
+| **`eslint`**               | `^9`      | Code linting and static analysis                             |
+| **`eslint-config-next`**   | `16.3.0`  | Next.js-specific ESLint rules and configurations             |
+| **`@types/node`**          | `^20`     | TypeScript definitions for Node.js runtime APIs              |
+| **`@types/react`**         | `^19`     | TypeScript definitions for React 19                          |
+| **`@types/react-dom`**     | `^19`     | TypeScript definitions for React 19 DOM                      |
+| **`@types/pg`**            | `^8.21.0` | TypeScript definitions for Node PostgreSQL client            |
 
 ### Backend Prototype Dependencies (`Backend/`)
 
-| Package / Tool | Version / Spec | Purpose |
-| :--- | :--- | :--- |
-| **`Python`** | `3.10+` | Python runtime for backend microservices |
-| **`Flask`** | `Latest` | Lightweight WSGI web framework for API endpoints |
-| **`psycopg` / `psycopg_pool`** | `v3+` | PostgreSQL connection pool and adapter for Python |
-| **`python-dotenv`** | `Latest` | Loads environment variables from `.env` files |
+| Package / Tool                 | Version / Spec | Purpose                                           |
+| :----------------------------- | :------------- | :------------------------------------------------ |
+| **`Python`**                   | `3.10+`        | Python runtime for backend microservices          |
+| **`Flask`**                    | `Latest`       | Lightweight WSGI web framework for API endpoints  |
+| **`psycopg` / `psycopg_pool`** | `v3+`          | PostgreSQL connection pool and adapter for Python |
+| **`python-dotenv`**            | `Latest`       | Loads environment variables from `.env` files     |
 
 ---
 
@@ -110,7 +110,7 @@ The application is powered by a relational PostgreSQL database (compatible with 
 - **Restaurant Directory:** `dhaka_restaurants` table storing geo-coordinates, cuisine tags, ratings, and Google Maps links.
 - **Geospatial Tracking:** Location-aware routing for users, restaurants, and riders.
 
-*(Reference `ERD_dark.png` in the project root for the complete database schema diagram).*
+_(Reference `ERD_dark.png` in the project root for the complete database schema diagram)._
 
 ---
 
@@ -121,19 +121,21 @@ The application is powered by a relational PostgreSQL database (compatible with 
 - **Node.js**: `v20.x` or higher recommended
 - **npm**: `v10.x` or higher
 - **PostgreSQL**: Neon Serverless Postgres or a local PostgreSQL instance (v14+)
-- **Python** *(optional, for Python backend)*: `v3.10+`
+- **Python** _(optional, for Python backend)_: `v3.10+`
 
 ---
 
 ### Installation & Setup
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/your-username/food-ninja.git
    cd "Food Ninja"
    ```
 
 2. **Install frontend dependencies:**
+
    ```bash
    # From root:
    npm install --prefix Frontend
@@ -143,6 +145,7 @@ The application is powered by a relational PostgreSQL database (compatible with 
 
 3. **Configure Environment Variables:**
    Create `Frontend/.env.local` with your PostgreSQL / Neon database connection string:
+
    ```env
    DATABASE_URL="postgresql://user:password@ep-sample-123456.us-east-2.aws.neon.tech/food_ninja?sslmode=require"
    ```
@@ -158,12 +161,12 @@ The application is powered by a relational PostgreSQL database (compatible with 
 
 ## 📜 Available Scripts (Run from project root)
 
-| Script | Command | Description |
-| :--- | :--- | :--- |
-| `dev` | `npm run dev` | Starts Next.js development server on `http://localhost:3000` |
-| `build` | `npm run build` | Builds optimized production bundle in `Frontend/` |
-| `start` | `npm run start` | Starts Next.js production server |
-| `lint` | `npm run lint` | Runs ESLint across `Frontend/` |
+| Script  | Command         | Description                                                  |
+| :------ | :-------------- | :----------------------------------------------------------- |
+| `dev`   | `npm run dev`   | Starts Next.js development server on `http://localhost:3000` |
+| `build` | `npm run build` | Builds optimized production bundle in `Frontend/`            |
+| `start` | `npm run start` | Starts Next.js production server                             |
+| `lint`  | `npm run lint`  | Runs ESLint across `Frontend/`                               |
 
 ---
 
@@ -193,6 +196,12 @@ If running the Flask API service in `Backend/`:
    ```
    The Flask API will run on `http://localhost:5000`.
 
+### Registration Email Verification
+
+Before starting the backend, configure the Brevo SMTP settings in `Backend/.env`. Use `Backend/.env.example` as a template and provide your own SMTP key and verified sender address. Never commit `.env` or share its contents.
+
+Apply `Database/schema.sql` to create the independent `email_verification` table. The registration page can then request a code from `POST /verify-email/send`; codes are sent using Brevo SMTP and expire after 10 minutes. Every account registration must include that code. The backend validates and consumes it in the same transaction that creates the account. `POST /verify-email` is also available for standalone one-time code verification.
+
 ---
 
 ## 🤝 Contributing
@@ -202,4 +211,3 @@ If running the Flask API service in `Backend/`:
 3. Commit your Changes (`git commit -m 'Add NewFeature'`)
 4. Push to the Branch (`git push origin feature/NewFeature`)
 5. Open a Pull Request
-

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
+import Image from "next/image";
 import { useParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { Badge, Panel, SectionHeading } from "@/components/ui";
@@ -64,9 +65,13 @@ export default function OwnerRestaurantDetailPage() {
     }
   }
 
-  useEffect(() => {
+  const loadRestaurantData = useEffectEvent(() => {
     void load();
     void apiGetFoodCategories().then(setCategories);
+  });
+
+  useEffect(() => {
+    loadRestaurantData();
   }, [params.id]);
 
   async function save() {
@@ -335,9 +340,12 @@ export default function OwnerRestaurantDetailPage() {
                         {/* Food Image thumbnail & upload button */}
                         <div className="relative h-32 w-full rounded-xl overflow-hidden bg-slate-200 border border-black/5 flex items-center justify-center group">
                           {food.picture_url ? (
-                            <img
+                            <Image
                               src={getImageUrl(food.picture_url)}
                               alt={food.name}
+                              width={320}
+                              height={128}
+                              unoptimized
                               className="h-full w-full object-cover"
                             />
                           ) : (
@@ -490,7 +498,7 @@ export default function OwnerRestaurantDetailPage() {
                     {new Date(order.order_timestamp).toLocaleString()} · {order.customer_phone}
                   </p>
                 </div>
-                {order.status === "pending" && (
+                {order.status === "pending" && !order.rider_username && (
                   <button
                     type="button"
                     onClick={() => cancelOrder(order.order_id)}

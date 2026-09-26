@@ -179,6 +179,11 @@ def rider_accept_order(order_id):
             eligible = {order["order_id"] for order in cur.fetchall() or []}
             if order_id not in eligible:
                 return jsonify({"success": False, "message": "Order is no longer available or outside your service area"}), 409
+            latest_location = get_live_location(payload["username"])
+            if not latest_location:
+                cur.execute(load_query("rider.sql", "set_rider_offline_if_online"), (payload["username"],))
+                conn.commit()
+                return jsonify({"success": False, "message": "Live location disconnected; you are offline and cannot accept this order"}), 409
             cur.execute(load_query("rider.sql", "claim_online_rider"), (payload["username"],))
             if not cur.fetchone():
                 return jsonify({"success": False, "message": "You already have a delivery or are offline"}), 409
@@ -221,22 +226,17 @@ def _advance_rider_order(order_id, action):
                 conn.commit()
                 return jsonify({"success": True, "status": "delivering", "message": "Pickup confirmed"}), 200
 
-            bill = order.get("bill") or ""
-            cur.execute(load_query("rider.sql", "get_rider_name"), (username,))
-            rider = cur.fetchone() or {}
-            rider_name = rider.get("name") or username
-            import re
-            fee_match = re.search(r"Delivery fee\s*=\s*([0-9]+(?:\.[0-9]+)?)", bill)
-            delivery_fee = float(fee_match.group(1)) if fee_match else 0.0
-            bill = re.sub(r"Delivered by:.*", f"Delivered by: {rider_name}", bill)
-            cur.execute(load_query("rider.sql", "mark_rider_delivered"), (bill, order_id, username))
-            if not cur.fetchone():
-                return jsonify({"success": False, "message": "Order is not in delivery state"}), 409
-            cur.execute(load_query("rider.sql", "credit_rider_balance"), (delivery_fee, "online", username))
-            if cur.rowcount == 0:
-                return jsonify({"success": False, "message": "Rider wallet update failed"}), 409
+            cur.execute(load_query("rider.sql", "settle_rider_delivery"), (order_id, username))
+            settlement = cur.fetchone()
+            if not settlement:
+                return jsonify({"success": False, "message": "Order is not in delivery state or rider is unavailable"}), 409
             conn.commit()
-            return jsonify({"success": True, "status": "delivered", "credited": delivery_fee}), 200
+            return jsonify({
+                "success": True,
+                "status": "delivered",
+                "credited": float(settlement["delivery_fee"]),
+                "due_amount_added": float(settlement["total_amount"]),
+            }), 200
     except psycopg.Error:
         return jsonify({"success": False, "message": "Database error"}), 500
 

@@ -32,7 +32,7 @@ WHERE restaurant_id = %s AND owner_id = %s AND status NOT IN ('pending', 'banned
 
 --name:get_owner_restaurant_orders
 SELECT O.order_id, O.status, O.order_timestamp::text AS order_timestamp,
-                         O.final_timestamp::text AS final_timestamp, O.bill, U.username,
+                         O.final_timestamp::text AS final_timestamp, O.bill, O.rider_username, U.username,
                          U.name AS customer_name, U.phone AS customer_phone
 FROM orders O
 JOIN cart C ON C.cart_id = O.cart_id
@@ -52,6 +52,7 @@ FROM cart C
 WHERE O.cart_id = C.cart_id
         AND O.order_id = %s
         AND O.status = 'pending'
+        AND O.rider_username IS NULL
         AND C.restaurant_id = %s
         AND EXISTS (
                         SELECT 1 FROM restaurant R

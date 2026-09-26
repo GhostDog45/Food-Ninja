@@ -29,6 +29,7 @@ export type UserRegisterPayload = {
   email: string;
   phone: string;
   password: string;
+  email_verification_code: string;
 };
 
 export type RiderRegisterPayload = {
@@ -39,6 +40,7 @@ export type RiderRegisterPayload = {
   phone: string;
   password: string;
   vehicle: "bike" | "bicycle";
+  email_verification_code: string;
 };
 
 export type AdminRegisterPayload = {
@@ -47,6 +49,8 @@ export type AdminRegisterPayload = {
   email: string;
   phone: string;
   password: string;
+  admin_invitation_code: string;
+  email_verification_code: string;
 };
 
 export type OwnerRegisterPayload = {
@@ -57,6 +61,7 @@ export type OwnerRegisterPayload = {
   phone: string;
   password: string;
   nid?: string;
+  email_verification_code: string;
 };
 
 export type RegisterPayload = UserRegisterPayload | RiderRegisterPayload | AdminRegisterPayload | OwnerRegisterPayload;
@@ -84,14 +89,15 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:500
 
 export function getImageUrl(url?: string | null, fallback = "/placeholder-food.png"): string {
   if (!url || typeof url !== "string" || !url.trim()) return fallback;
-  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
-    return url;
+  const normalizedUrl = url.trim().replace(/\\/g, "/");
+  if (/^(https?:|data:)/i.test(normalizedUrl)) {
+    return normalizedUrl;
   }
-  if (url.startsWith("/uploads/") || url.startsWith("uploads/")) {
-    const cleanPath = url.startsWith("/") ? url : `/${url}`;
-    return `${BACKEND_URL}${cleanPath}`;
+  const uploadPath = normalizedUrl.replace(/^\/?(?:Backend\/)?/, "");
+  if (uploadPath.startsWith("uploads/")) {
+    return `${BACKEND_URL}/${uploadPath}`;
   }
-  return url.startsWith("/") ? url : `/${url}`;
+  return normalizedUrl.startsWith("/") ? normalizedUrl : `/${normalizedUrl}`;
 }
 
 // Auth token storage helpers (localStorage)
@@ -197,6 +203,17 @@ export async function apiRegister(payload: RegisterPayload): Promise<RegisterRes
     throw new Error(data.message || "Failed to register");
   }
 
+  return data;
+}
+
+export async function apiSendEmailVerification(email: string): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${BACKEND_URL}/verify-email/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to send verification code");
   return data;
 }
 
@@ -603,6 +620,7 @@ export type OwnerOrder = {
   order_timestamp: string;
   final_timestamp?: string | null;
   bill: string;
+  rider_username?: string | null;
   username: string;
   customer_name: string;
   customer_phone: string;
@@ -633,7 +651,7 @@ export async function apiUpdateOwnerFood(restaurantId: string, foodId: string, p
   if (!res.ok || !data.success) throw new Error(data.message || "Failed to update food");
 }
 
-export async function apiGetAdminRestaurantDetail(restaurantId: string): Promise<{ restaurant: Record<string, unknown>; foods: OwnerFood[] }> {
+export async function apiGetAdminRestaurantDetail(restaurantId: string): Promise<{ restaurant: Record<string, unknown>; foods: OwnerFood[]; orders: AdminOrder[] }> {
   const token = getAuthToken();
   if (!token) throw new Error("Admin authorization required");
   const res = await fetch(`${BACKEND_URL}/admin/restaurants/${restaurantId}`, { headers: { Authorization: `Bearer ${token}` } });
@@ -642,13 +660,73 @@ export async function apiGetAdminRestaurantDetail(restaurantId: string): Promise
   return data;
 }
 
-export async function apiGetAdminProfile(resource: string, identifier: string): Promise<Record<string, unknown>> {
+export type AdminOrder = {
+  order_id: string;
+  status: string;
+  order_timestamp: string;
+  final_timestamp?: string | null;
+  bill: string;
+  restaurant_name?: string;
+  restaurant_id?: string;
+  username?: string;
+  customer_name?: string;
+  rider_username?: string | null;
+  rider_name?: string | null;
+};
+
+export type AdminOrderDetail = AdminOrder & {
+  latitude: number;
+  longitude: number;
+  payment_method?: string;
+  payment_status?: string;
+  transaction_id?: string;
+};
+
+export type AdminOwnedRestaurant = {
+  restaurant_id: string;
+  name: string;
+  status: string;
+  open_time: string;
+  close_time: string;
+};
+
+export async function apiGetAdminProfile(resource: string, identifier: string): Promise<{ profile: Record<string, unknown>; orders: AdminOrder[]; restaurants: AdminOwnedRestaurant[] }> {
   const token = getAuthToken();
   if (!token) throw new Error("Admin authorization required");
   const res = await fetch(`${BACKEND_URL}/admin/profiles/${resource}/${encodeURIComponent(identifier)}`, { headers: { Authorization: `Bearer ${token}` } });
   const data = await res.json();
   if (!res.ok || !data.success) throw new Error(data.message || "Failed to load profile");
-  return data.profile;
+  return { profile: data.profile, orders: data.orders || [], restaurants: data.restaurants || [] };
+}
+
+export async function apiGetAdminOrder(orderId: string): Promise<{ order: AdminOrderDetail; items: Array<Record<string, unknown>> }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Admin authorization required");
+  const res = await fetch(`${BACKEND_URL}/admin/orders/${encodeURIComponent(orderId)}`, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to find order");
+  return data;
+}
+
+export async function apiCancelAdminOrder(orderId: string): Promise<void> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Admin authorization required");
+  const res = await fetch(`${BACKEND_URL}/admin/orders/${encodeURIComponent(orderId)}/cancel`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to cancel order");
+}
+
+export async function apiAdjustRiderAmounts(username: string, duePaid: number, withdrawal: number): Promise<{ due_amount: number; balance: number }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Admin authorization required");
+  const res = await fetch(`${BACKEND_URL}/admin/riders/${encodeURIComponent(username)}/amounts`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ due_paid: duePaid, withdrawal }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to adjust rider amounts");
+  return data;
 }
 
 export async function apiDeleteRestaurant(restaurantId: string): Promise<{ success: boolean; message: string }> {
@@ -1329,6 +1407,23 @@ export async function apiGetUserCategoriesDetail(): Promise<FoodCategory[]> {
   } catch {
     return [];
   }
+}
+
+export async function apiUploadFoodCategory(category: string, file: File): Promise<FoodCategory> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Admin authorization required");
+  if (file.size > 5 * 1024 * 1024) throw new Error("Picture exceeds the 5 MB limit");
+  const formData = new FormData();
+  formData.append("category", category);
+  formData.append("file", file);
+  const res = await fetch(`${BACKEND_URL}/admin/categories`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to save category");
+  return data.category;
 }
 
 export type UserProfile = {

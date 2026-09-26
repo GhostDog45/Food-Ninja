@@ -199,7 +199,8 @@ ORDER BY
 LIMIT 1;
 
 --name:create_order
-INSERT INTO orders (order_id, username, cart_id, rider_username, location, status, bill, order_timestamp)
+INSERT INTO orders (order_id, username, cart_id, rider_username, location, status, bill, order_timestamp,
+                    delivery_fee, food_preparing_notes, delivery_notes)
 VALUES (
     %s,
     %s,
@@ -207,9 +208,15 @@ VALUES (
     %s,
     ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
     'pending',
+    '',
+    CURRENT_TIMESTAMP,
     %s,
-    CURRENT_TIMESTAMP
+    %s,
+    %s
 );
+
+--name:get_created_order_bill
+SELECT bill FROM orders WHERE order_id = %s;
 
 --name:create_payment
 INSERT INTO payment (order_id, username, transaction_id, payment_method, status, timestamp)

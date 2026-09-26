@@ -208,3 +208,27 @@ def upload_food_picture(restaurant_id, food_id):
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
+
+@uploads_bp.route("/admin/categories", methods=["POST"])
+def upsert_food_category():
+    payload = auth.get_user_info()
+    if not auth.is_approved_admin(payload):
+        return jsonify({"success": False, "message": "Approved admin authorization required"}), 403
+
+    category = (request.form.get("category") or "").strip()
+    if not category or len(category) > 50:
+        return jsonify({"success": False, "message": "Category must contain 1 to 50 characters"}), 400
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "No file field 'file' in upload request"}), 400
+
+    picture_url, err = _save_file(request.files["file"], "categories", f"category_{category}")
+    if err:
+        return jsonify({"success": False, "message": err}), 400
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(load_query("admin.sql", "insert_food_category"), (category, picture_url))
+            conn.commit()
+            return jsonify({"success": True, "category": cur.fetchone(), "picture_url": picture_url}), 201
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+

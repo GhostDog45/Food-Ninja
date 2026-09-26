@@ -220,4 +220,168 @@ BEFORE INSERT OR UPDATE OF status ON orders
 FOR EACH ROW
 EXECUTE FUNCTION normalize_legacy_order_status();
 
-COMMIT;
+
+
+
+ALTER TABLE orders
+	ADD COLUMN IF NOT EXISTS delivery_fee numeric(10, 2) NOT NULL DEFAULT 50.00,
+	ADD COLUMN IF NOT EXISTS food_preparing_notes text NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS delivery_notes text NOT NULL DEFAULT '';
+
+ALTER TABLE rider
+	ADD COLUMN IF NOT EXISTS due_amount numeric(10, 2) NOT NULL DEFAULT 0.00;
+
+ALTER TABLE rider
+	DROP CONSTRAINT IF EXISTS rider_due_amount_check;
+
+ALTER TABLE rider
+	ADD CONSTRAINT rider_due_amount_check CHECK (due_amount >= 0);
+
+CREATE OR REPLACE FUNCTION refresh_order_bill(p_order_id varchar)
+RETURNS text
+LANGUAGE plpgsql
+AS $$
+DECLARE
+	order_row record;
+	item_lines text;
+	raw_total numeric(10, 2);
+	discounted_total numeric(10, 2);
+	instructions text;
+	bill_text text;
+BEGIN
+	SELECT O.order_id, O.username, O.order_timestamp, O.location, O.delivery_fee,
+		   O.food_preparing_notes, O.delivery_notes, O.status,
+		   RD.name AS rider_name, O.rider_username,
+		   R.name AS restaurant_name
+	INTO order_row
+	FROM orders O
+	JOIN cart C ON C.cart_id = O.cart_id
+	JOIN restaurant R ON R.restaurant_id = C.restaurant_id
+	LEFT JOIN rider RD ON RD.username = O.rider_username
+	WHERE O.order_id = p_order_id;
+
+	IF NOT FOUND THEN
+		RETURN NULL;
+	END IF;
+
+	SELECT
+		COALESCE(string_agg(
+			F.name || ' x ' || CI.quantity::text || ' = ' ||
+			trim_scale(round(round(F.price * (1 - COALESCE(F.discount, 0) / 100.0), 2) * CI.quantity, 2))::text,
+			E'\n' ORDER BY F.name ASC
+		), ''),
+		COALESCE(sum(F.price * CI.quantity), 0),
+		COALESCE(sum(round(round(F.price * (1 - COALESCE(F.discount, 0) / 100.0), 2) * CI.quantity, 2)), 0)
+	INTO item_lines, raw_total, discounted_total
+	FROM cart_item CI
+	JOIN foods F ON F.food_id = CI.food_id
+	WHERE CI.cart_id = (SELECT cart_id FROM orders WHERE order_id = p_order_id);
+
+	instructions := concat_ws(' | ',
+		NULLIF('Food prep: ' || order_row.food_preparing_notes, 'Food prep: '),
+		NULLIF('Delivery: ' || order_row.delivery_notes, 'Delivery: ')
+	);
+	IF instructions = '' THEN
+		instructions := 'None';
+	END IF;
+
+	bill_text :=
+		'Order id: ' || order_row.order_id || E'\n' ||
+		'Restaurant name: ' || order_row.restaurant_name || E'\n' ||
+		'Ordered by: ' || order_row.username || E'\n' ||
+		'Timestamp: ' || to_char(order_row.order_timestamp, 'YYYY-MM-DD HH12:MI AM') || E'\n' ||
+		'Location: ' || to_char(ST_Y(order_row.location::geometry), 'FM990.0000') || '° N, ' ||
+			to_char(ST_X(order_row.location::geometry), 'FM990.0000') || '° E' || E'\n' ||
+		'Delivered by: ' || CASE WHEN order_row.status = 'delivered'
+			THEN COALESCE(order_row.rider_name, order_row.rider_username, 'Unknown rider')
+			ELSE 'Pending Assignment' END || E'\n\n' ||
+		item_lines || E'\n\n' ||
+		'Instructions: ' || instructions || E'\n\n' ||
+		'Total = ' || trim_scale(round(raw_total, 2))::text || E'\n' ||
+		'Discount = ' || trim_scale(round(raw_total - discounted_total, 2))::text || E'\n' ||
+		'Delivery fee = ' || trim_scale(round(order_row.delivery_fee, 2))::text || E'\n\n' ||
+		'Sum total = ' || trim_scale(round(discounted_total + order_row.delivery_fee, 2))::text;
+
+	UPDATE orders SET bill = bill_text WHERE order_id = p_order_id;
+	RETURN bill_text;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION refresh_order_bill_after_change()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+	IF TG_OP = 'INSERT' THEN
+		PERFORM refresh_order_bill(NEW.order_id);
+	ELSIF NEW.status = 'delivered' AND OLD.status IS DISTINCT FROM NEW.status THEN
+		UPDATE orders
+		SET bill = regexp_replace(
+			NEW.bill,
+			'Delivered by:.*',
+			'Delivered by: ' || COALESCE(
+				(SELECT name FROM rider WHERE username = NEW.rider_username),
+				NEW.rider_username,
+				'Unknown rider'
+			)
+		)
+		WHERE order_id = NEW.order_id;
+	END IF;
+	RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS refresh_order_bill_on_order_change ON orders;
+
+CREATE TRIGGER refresh_order_bill_on_order_change
+AFTER INSERT OR UPDATE OF status
+ON orders
+FOR EACH ROW
+EXECUTE FUNCTION refresh_order_bill_after_change();
+
+CREATE OR REPLACE FUNCTION ban_restaurants_with_owner()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+	IF NEW.status = 'banned' AND OLD.status IS DISTINCT FROM NEW.status THEN
+		UPDATE restaurant
+		SET status = 'banned'
+		WHERE owner_id = NEW.owner_id
+		  AND status IS DISTINCT FROM 'banned';
+	END IF;
+	RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS ban_restaurants_after_owner_ban ON restaurant_owner;
+
+CREATE TRIGGER ban_restaurants_after_owner_ban
+AFTER UPDATE OF status ON restaurant_owner
+FOR EACH ROW
+EXECUTE FUNCTION ban_restaurants_with_owner();
+
+CREATE TABLE IF NOT EXISTS email_verification (
+	email VARCHAR(255) PRIMARY KEY,
+	code VARCHAR(6) NOT NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE OR REPLACE FUNCTION cleanup_expired_email_verifications()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+	DELETE FROM email_verification
+	WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '10 minutes';
+	RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS cleanup_expired_email_verifications_after_write ON email_verification;
+
+CREATE TRIGGER cleanup_expired_email_verifications_after_write
+AFTER INSERT OR UPDATE ON email_verification
+FOR EACH ROW
+EXECUTE FUNCTION cleanup_expired_email_verifications();
+

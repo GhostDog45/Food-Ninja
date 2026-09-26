@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AuthChrome } from "@/components/auth-chrome";
 import { Badge, cn } from "@/components/ui";
 import { useToast } from "@/components/toast-provider";
-import { apiRegister } from "@/lib/backend";
+import { apiRegister, apiSendEmailVerification } from "@/lib/backend";
 
 const ROLES = [
   { id: "user", title: "Customer", subtitle: "Order food & track deliveries", user_type: "user" },
@@ -30,6 +30,10 @@ function RegisterContent() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [adminInvitationCode, setAdminInvitationCode] = useState("");
+  const [emailVerificationCode, setEmailVerificationCode] = useState("");
+  const [verificationSentFor, setVerificationSentFor] = useState("");
+  const [sendingVerification, setSendingVerification] = useState(false);
   const [nid, setNid] = useState("");
   const [vehicle, setVehicle] = useState<"bike" | "bicycle">("bike");
 
@@ -83,6 +87,16 @@ function RegisterContent() {
       return;
     }
 
+    if (selectedRole === "admin" && !adminInvitationCode.trim()) {
+      toast("Please enter the admin invitation code", "warning");
+      return;
+    }
+
+    if (!/^\d{6}$/.test(emailVerificationCode.trim()) || verificationSentFor !== cleanEmail) {
+      toast("Request a code for this email and enter the six-digit code", "warning");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -94,6 +108,7 @@ function RegisterContent() {
           email: cleanEmail,
           phone: cleanPhone,
           password: password,
+          email_verification_code: emailVerificationCode.trim(),
           nid: cleanNid,
         });
       } else if (selectedRole === "rider") {
@@ -105,6 +120,7 @@ function RegisterContent() {
           phone: cleanPhone,
           password: password,
           vehicle: vehicle,
+          email_verification_code: emailVerificationCode.trim(),
         });
       } else if (selectedRole === "admin") {
         await apiRegister({
@@ -113,6 +129,8 @@ function RegisterContent() {
           email: cleanEmail,
           phone: cleanPhone,
           password: password,
+          admin_invitation_code: adminInvitationCode.trim(),
+          email_verification_code: emailVerificationCode.trim(),
         });
       } else {
         await apiRegister({
@@ -122,6 +140,7 @@ function RegisterContent() {
           email: cleanEmail,
           phone: cleanPhone,
           password: password,
+          email_verification_code: emailVerificationCode.trim(),
         });
       }
 
@@ -138,6 +157,25 @@ function RegisterContent() {
       toast(errorMsg, "danger");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function sendVerificationCode() {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      toast("Enter your email address first", "warning");
+      return;
+    }
+    setSendingVerification(true);
+    try {
+      await apiSendEmailVerification(cleanEmail);
+      setVerificationSentFor(cleanEmail);
+      setEmailVerificationCode("");
+      toast("Verification code sent. It expires in 10 minutes.", "success");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Could not send verification code", "danger");
+    } finally {
+      setSendingVerification(false);
     }
   }
 
@@ -240,6 +278,10 @@ function RegisterContent() {
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
+                if (e.target.value.trim().toLowerCase() !== verificationSentFor) {
+                  setVerificationSentFor("");
+                  setEmailVerificationCode("");
+                }
                 if (!username && e.target.value.includes("@")) {
                   const prefix = e.target.value.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "");
                   if (prefix) setUsername(prefix);
@@ -249,6 +291,26 @@ function RegisterContent() {
               placeholder="e.g. name@example.com"
               required
             />
+            <button type="button" onClick={() => void sendVerificationCode()} disabled={sendingVerification} className="mt-2 rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-50 disabled:opacity-50">
+              {sendingVerification ? "Sending code…" : verificationSentFor === email.trim().toLowerCase() ? "Resend verification code" : "Send verification code"}
+            </button>
+          </label>
+
+          <label className="block space-y-1 text-xs font-semibold text-slate-700">
+            <span>Email verification code *</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              pattern="[0-9]{6}"
+              value={emailVerificationCode}
+              onChange={(event) => setEmailVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              className="w-full rounded-2xl border border-black/10 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20"
+              placeholder="6-digit code"
+              required
+            />
+            <span className="block text-[11px] font-normal text-slate-500">The code is checked when you create the account and expires after 10 minutes.</span>
           </label>
 
           {/* Phone Number */}
@@ -292,6 +354,23 @@ function RegisterContent() {
                 <option value="bike">Motorbike / Bike</option>
                 <option value="bicycle">Bicycle</option>
               </select>
+            </label>
+          )}
+
+          {/* Password */}
+          {selectedRole === "admin" && (
+            <label className="block space-y-1 text-xs font-semibold text-slate-700">
+              <span>Admin invitation code *</span>
+              <input
+                type="password"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={adminInvitationCode}
+                onChange={(event) => setAdminInvitationCode(event.target.value)}
+                className="w-full rounded-2xl border border-black/10 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20"
+                placeholder="Enter invitation code"
+                required
+              />
             </label>
           )}
 

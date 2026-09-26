@@ -1,6 +1,5 @@
 import uuid
 import re
-from datetime import datetime
 from flask import Blueprint, request, jsonify
 from db import get_connection, load_query
 import auth
@@ -623,9 +622,6 @@ def checkout_cart():
                 if not items:
                     return jsonify({"success": False, "message": "Cart is empty"}), 400
 
-                raw_total = sum(float(it["price"]) * int(it["quantity"]) for it in items)
-                subtotal = sum(float(it["item_total"]) for it in items)
-                discount_amount = max(0.0, round(raw_total - subtotal, 2))
                 rest_lat = float(active_cart.get("restaurant_latitude") or 23.726154)
                 rest_lon = float(active_cart.get("restaurant_longitude") or 90.390298)
                 delivery_est = calculate_order_delivery_time(
@@ -637,50 +633,18 @@ def checkout_cart():
                     delivery_est["distance_km"],
                     delivery_est["estimated_delivery_mins"]
                 )
-                total_bill = round(subtotal + delivery_fee, 2)
-
-                def _fmt_num(n):
-                    fl = float(n)
-                    return str(int(fl)) if fl.is_integer() else f"{fl:.2f}"
-
-                now_str = datetime.now().strftime("%Y-%m-%d %I:%M %p")
-                location_str = f"{user_lat:.4f}° N, {user_lon:.4f}° E"
-
                 body = request.get_json(silent=True) or {}
                 food_prep = (body.get("food_preparing_notes") or "").strip()
                 deliv_note = (body.get("delivery_notes") or "").strip()
-                instructions_parts = []
-                if food_prep:
-                    instructions_parts.append(f"Food prep: {food_prep}")
-                if deliv_note:
-                    instructions_parts.append(f"Delivery: {deliv_note}")
-                instructions_text = " | ".join(instructions_parts) if instructions_parts else "None"
-
-                item_lines = "\n".join(
-                    f"{it['name']} x {it['quantity']} = {_fmt_num(it['item_total'])}"
-                    for it in items
-                )
-
-                bill_str = (
-                    f"Restaurant name: {active_cart['restaurant_name']}\n"
-                    f"Ordered by: {username}\n"
-                    f"Timestamp: {now_str}\n"
-                    f"Location: {location_str}\n"
-                    f"Delivered by: Pending Assignment\n\n"
-                    f"{item_lines}\n\n"
-                    f"Instructions: {instructions_text}\n\n"
-                    f"Total = {_fmt_num(raw_total)}\n"
-                    f"Discount = {_fmt_num(discount_amount)}\n"
-                    f"Delivery fee = {_fmt_num(delivery_fee)}\n\n"
-                    f"Sum total = {_fmt_num(total_bill)}"
-                )
 
                 # Create order (rider_username is NULL until a rider accepts).
                 order_id = f"OD-{uuid.uuid4().hex[:8].upper()}"
                 cur.execute(
                     load_query("user.sql", "create_order"),
-                    (order_id, username, cart_id, None, user_lon, user_lat, bill_str)
+                    (order_id, username, cart_id, None, user_lon, user_lat, delivery_fee, food_prep, deliv_note)
                 )
+                cur.execute(load_query("user.sql", "get_created_order_bill"), (order_id,))
+                bill_str = cur.fetchone()["bill"]
 
                 # 5. Create payment record with 'Cash on delivery'
                 tx_id = f"COD-{uuid.uuid4().hex[:10].upper()}"
@@ -858,36 +822,10 @@ def get_order_detail(order_id):
                 )
 
                 bill_text = o.get("bill") or ""
-                if "\n" not in bill_text and items:
-                    def _fmt_local(n):
-                        fl = float(n)
-                        return str(int(fl)) if fl.is_integer() else f"{fl:.2f}"
-
-                    raw_total = sum(float(it["price"]) * int(it["quantity"]) for it in items)
-                    subtotal = sum(float(it["item_total"]) for it in items)
-                    discount_amount = max(0.0, round(raw_total - subtotal, 2))
-                    delivery_fee = 50.0
-                    total_bill = round(subtotal + delivery_fee, 2)
-
-                    item_lines = "\n".join(
-                        f"{it['name']} x {it['quantity']} = {_fmt_local(it['item_total'])}"
-                        for it in items
-                    )
-
-                    rider_disp = o.get("rider_name") or o.get("rider_username") or "Pending Assignment"
-                    bill_text = (
-                        f"Restaurant name: {o['restaurant_name']}\n"
-                        f"Ordered by: {username}\n"
-                        f"Timestamp: {o.get('order_timestamp') or 'N/A'}\n"
-                        f"Location: {user_lat:.4f}° N, {user_lon:.4f}° E\n"
-                        f"Delivered by: {rider_disp}\n\n"
-                        f"{item_lines}\n\n"
-                        f"Instructions: None\n\n"
-                        f"Total = {_fmt_local(raw_total)}\n"
-                        f"Discount = {_fmt_local(discount_amount)}\n"
-                        f"Delivery fee = {_fmt_local(delivery_fee)}\n\n"
-                        f"Sum total = {_fmt_local(total_bill)}"
-                    )
+                if not bill_text or not bill_text.startswith("Order id:"):
+                    cur.execute("SELECT refresh_order_bill(%s) AS bill", (o["order_id"],))
+                    refreshed_bill = cur.fetchone()
+                    bill_text = refreshed_bill["bill"] if refreshed_bill else ""
 
                 if "Desc:" in bill_text:
                     bill_text = re.sub(r"\n\s*Desc:[^\n]*", "", bill_text)
