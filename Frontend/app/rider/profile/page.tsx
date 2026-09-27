@@ -129,9 +129,8 @@ export default function RiderProfilePage() {
         </Badge>
       }
     >
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
-        <div className="space-y-6">
-          {/* Financial Overview (Balance and Due Amount) */}
+      <div className="space-y-6 max-w-5xl">
+        {/* Financial Overview (Balance and Due Amount) */}
           <Panel className="space-y-4 p-6 sm:p-8">
             <SectionHeading
               eyebrow="Financial Overview"
@@ -389,43 +388,6 @@ export default function RiderProfilePage() {
               </div>
             </div>
           </Panel>
-        </div>
-
-        {/* Right column: Guidelines & Policy */}
-        <div className="space-y-6">
-          <Panel className="space-y-5 p-6 sm:p-8">
-            <SectionHeading eyebrow="Courier Policy" title="Operations & Guidelines" />
-            <div className="space-y-3.5 text-xs text-slate-600 leading-relaxed">
-              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
-                <p className="font-bold text-slate-900">📍 Static Base vs Live Location</p>
-                <p className="text-slate-600">
-                  Your <strong>static base location</strong> defines your home territory for receiving orders within 8-10 km. While on shift, your <strong>live location</strong> via WebSocket confirms you are within 4 km of the restaurant for pickup.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
-                <p className="font-bold text-slate-900">💵 Cash Collections & Due Amount</p>
-                <p className="text-slate-600">
-                  When you deliver a Cash on Delivery order, you collect the total bill from the customer. The delivery charge is credited to your balance, while the food amount is logged in your Due Amount to be remitted to the restaurant owner or platform.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
-                <p className="font-bold text-slate-900">⚡ Vehicle Transit Speed</p>
-                <p className="text-slate-600">
-                  Motorcycle couriers are calibrated to 30 km/h in clear traffic; bicycle couriers average 16 km/h. Delivery estimates and customer notifications adjust automatically based on your vehicle.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-black/5 bg-slate-50/70 p-4 space-y-1">
-                <p className="font-bold text-slate-900">🛡️ Profile Picture Verification</p>
-                <p className="text-slate-600">
-                  Ensure your photo is clearly visible. Restaurant staff and customers view your profile picture during order handover to ensure security and trust.
-                </p>
-              </div>
-            </div>
-          </Panel>
-        </div>
       </div>
     </AppShell>
   );

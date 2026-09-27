@@ -9,6 +9,7 @@ import { customerNav } from "@/lib/platform";
 import {
   apiGetUserOrders,
   apiSubmitOrderReview,
+  apiCancelUserOrder,
   type CustomerOrder,
 } from "@/lib/backend";
 import { useToast } from "@/components/toast-provider";
@@ -78,6 +79,25 @@ export default function OrderHistoryPage() {
   const [riderRating, setRiderRating] = useState<number>(5);
   const [riderReview, setRiderReview] = useState<string>("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+
+  // Cancellation modal state
+  const [cancellingOrder, setCancellingOrder] = useState<CustomerOrder | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  async function handleConfirmCancel() {
+    if (!cancellingOrder) return;
+    setIsCancelling(true);
+    try {
+      await apiCancelUserOrder(cancellingOrder.order_id);
+      toast("Order cancelled successfully.", "success");
+      setCancellingOrder(null);
+      await fetchOrders();
+    } catch (err: any) {
+      toast(err.message || "Failed to cancel order.", "danger");
+    } finally {
+      setIsCancelling(false);
+    }
+  }
 
 
   async function fetchOrders() {
@@ -426,13 +446,24 @@ export default function OrderHistoryPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-black/5">
                       <div className="flex flex-wrap items-center gap-2">
                         {isActive && (
-                          <Link
-                            href={`/orders/${order.order_id}`}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-amber-600 transition"
-                          >
-                            <span>🛵</span>
-                            <span>Track Live Order</span>
-                          </Link>
+                          <>
+                            <Link
+                              href={`/orders/${order.order_id}`}
+                              className="inline-flex items-center gap-1.5 rounded-full bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-amber-600 transition"
+                            >
+                              <span>🛵</span>
+                              <span>Track Live Order</span>
+                            </Link>
+
+                            <button
+                              type="button"
+                              onClick={() => setCancellingOrder(order)}
+                              className="rounded-full border border-rose-300 bg-rose-50 px-3.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition shadow-2xs inline-flex items-center gap-1.5"
+                            >
+                              <span>✕</span>
+                              <span>Cancel</span>
+                            </button>
+                          </>
                         )}
 
                         <button
@@ -582,6 +613,37 @@ Sum total = ${receiptModalOrder.bill}`
               </div>
             </div>
           )}
+        </Modal>
+
+        {/* Cancel Order Confirmation Modal */}
+        <Modal
+          open={Boolean(cancellingOrder)}
+          onClose={() => setCancellingOrder(null)}
+          title="Cancel Your Order"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Are you sure you want to cancel order <strong>#{cancellingOrder?.order_id}</strong> from <strong>{cancellingOrder?.restaurant_name}</strong>?
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isCancelling}
+                onClick={() => setCancellingOrder(null)}
+                className="rounded-full border border-black/10 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition"
+              >
+                Keep Order
+              </button>
+              <button
+                type="button"
+                disabled={isCancelling}
+                onClick={handleConfirmCancel}
+                className="rounded-full bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
+              >
+                {isCancelling ? "Cancelling..." : "Yes, Cancel Order"}
+              </button>
+            </div>
+          </div>
         </Modal>
       </AppShell>
     </CustomerAccessGuard>

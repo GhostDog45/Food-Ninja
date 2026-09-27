@@ -6,15 +6,20 @@ import { useParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { Badge, Panel, SectionHeading } from "@/components/ui";
 import { customerNav } from "@/lib/platform";
-import { apiGetUserOrderDetail, type CustomerOrder } from "@/lib/backend";
+import { apiGetUserOrderDetail, apiCancelUserOrder, type CustomerOrder } from "@/lib/backend";
 import { CustomerAccessGuard } from "@/components/customer-access-guard";
 import { OrderLiveTrackingMap } from "@/components/order-live-tracking-map";
+import { useToast } from "@/components/toast-provider";
+import { Modal } from "@/components/modal";
 
 export default function OrderTrackingPage() {
   const params = useParams<{ id: string }>();
+  const { toast } = useToast();
   const [order, setOrder] = useState<CustomerOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const refreshOrder = () => {
     const rawId = params?.id;
@@ -22,6 +27,21 @@ export default function OrderTrackingPage() {
     apiGetUserOrderDetail(rawId)
       .then((data) => setOrder(data))
       .catch(() => {});
+  };
+
+  const handleCancelOrder = async () => {
+    if (!order) return;
+    setIsCancelling(true);
+    try {
+      await apiCancelUserOrder(order.order_id);
+      toast("Your order has been cancelled successfully.", "success");
+      setCancelModalOpen(false);
+      refreshOrder();
+    } catch (err: any) {
+      toast(err.message || "Failed to cancel order.", "danger");
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   useEffect(() => {
@@ -98,7 +118,7 @@ export default function OrderTrackingPage() {
                     Placed on {order.order_timestamp ? new Date(order.order_timestamp).toLocaleString() : "Recently"}
                   </p>
                 </div>
-                <div>
+                <div className="flex items-center gap-2">
                   <Badge
                     tone={
                       order.status === "delivered"
@@ -110,8 +130,26 @@ export default function OrderTrackingPage() {
                   >
                     {order.status.toUpperCase()}
                   </Badge>
+
+                  {active && (
+                    <button
+                      type="button"
+                      onClick={() => setCancelModalOpen(true)}
+                      className="rounded-full border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition shadow-2xs"
+                    >
+                      ✕ Cancel Order
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {/* Status Notice if Cancelled */}
+              {order.status === "cancelled" && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800 space-y-1">
+                  <p className="font-bold">❌ Order Cancelled</p>
+                  <p>This order has been cancelled.</p>
+                </div>
+              )}
 
               {/* Status Notice if Rejected */}
               {order.status === "rejected" && (
@@ -208,6 +246,37 @@ export default function OrderTrackingPage() {
             </Panel>
           </div>
         )}
+
+        {/* Customer Order Cancellation Modal */}
+        <Modal
+          open={cancelModalOpen}
+          onClose={() => setCancelModalOpen(false)}
+          title="Cancel Your Order"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Are you sure you want to cancel this order from <strong>{order?.restaurant_name}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isCancelling}
+                onClick={() => setCancelModalOpen(false)}
+                className="rounded-full border border-black/10 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition"
+              >
+                Keep Order
+              </button>
+              <button
+                type="button"
+                disabled={isCancelling}
+                onClick={handleCancelOrder}
+                className="rounded-full bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
+              >
+                {isCancelling ? "Cancelling..." : "Yes, Cancel Order"}
+              </button>
+            </div>
+          </div>
+        </Modal>
       </AppShell>
     </CustomerAccessGuard>
   );

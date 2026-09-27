@@ -307,3 +307,20 @@ SET rider_rating = EXCLUDED.rider_rating,
     restaurant_rating = EXCLUDED.restaurant_rating,
     restaurant_review = EXCLUDED.restaurant_review,
     timestamp = CURRENT_TIMESTAMP;
+
+--name:cancel_user_order
+WITH cancelled AS (
+    UPDATE orders
+    SET status = 'cancelled', final_timestamp = CURRENT_TIMESTAMP
+    WHERE LOWER(order_id) = LOWER(%s)
+      AND LOWER(username) = LOWER(%s)
+      AND status IN ('pending', 'delivering')
+    RETURNING order_id, rider_username
+), released AS (
+    UPDATE rider R
+    SET status = 'online'
+    FROM cancelled C
+    WHERE R.username = C.rider_username AND R.status = 'delivering'
+    RETURNING R.username
+)
+SELECT order_id FROM cancelled;

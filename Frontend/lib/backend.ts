@@ -475,17 +475,24 @@ export type RiderOrder = {
   final_timestamp?: string | null;
   restaurant_id: string;
   restaurant_name: string;
+  restaurant_picture_url?: string | null;
   restaurant_latitude: number;
   restaurant_longitude: number;
   customer_latitude: number;
   customer_longitude: number;
   customer_name?: string;
+  customer_phone?: string;
+  customer_pfp_url?: string | null;
 };
 
-async function riderApi(path: string, method = "GET"): Promise<any> {
+async function riderApi(path: string, method = "GET", body?: any): Promise<any> {
   const token = getAuthToken();
   if (!token) throw new Error("Rider authentication required");
-  const res = await fetch(`${BACKEND_URL}${path}`, { method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+  const res = await fetch(`${BACKEND_URL}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    ...(body ? { body: JSON.stringify(body) } : {})
+  });
   const data = await res.json();
   if (!res.ok || !data.success) throw new Error(data.message || "Rider request failed");
   return data;
@@ -510,6 +517,10 @@ export async function apiAcceptRiderOrder(orderId: string): Promise<void> {
 
 export async function apiRiderOrderAction(orderId: string, action: "pickup" | "delivered"): Promise<void> {
   await riderApi(`/rider/orders/${encodeURIComponent(orderId)}/${action}`, "POST");
+}
+
+export async function apiRiderCancelOrder(orderId: string, reason?: string): Promise<{ success: boolean; message: string }> {
+  return await riderApi(`/rider/orders/${encodeURIComponent(orderId)}/cancel`, "POST", { reason });
 }
 
 export async function apiGetRiderHistory(): Promise<RiderOrder[]> {
@@ -1478,6 +1489,22 @@ export async function apiConfirmOrderPickup(orderId: string): Promise<{ success:
   });
   const data = await res.json();
   if (!res.ok || !data.success) throw new Error(data.message || "Failed to confirm pickup");
+  return data;
+}
+
+export async function apiCancelUserOrder(orderId: string): Promise<{ success: boolean; message: string }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/user/orders/${encodeURIComponent(orderId)}/cancel`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to cancel order");
   return data;
 }
 

@@ -199,7 +199,8 @@ def get_restaurant_detail(restaurant_id):
                         "discount": discount,
                         "discounted_price": disc_price,
                         "description": f.get("description") or "",
-                        "subcategory": f.get("subcategory") or ""
+                        "subcategory": f.get("subcategory") or "",
+                        "picture_url": f.get("picture_url")
                     })
 
                 restaurant_data = {
@@ -1052,3 +1053,33 @@ def submit_order_review(order_id):
                 }), 200
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
+
+
+@user_bp.route("/user/orders/<order_id>/cancel", methods=["POST"])
+def user_cancel_order(order_id):
+    payload, err = _get_authenticated_user()
+    if err:
+        return err
+
+    username = payload.get("username")
+    clean_id = (order_id or "").strip()
+
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(load_query("user.sql", "cancel_user_order"), (clean_id, username))
+            cancelled = cur.fetchone()
+            if not cancelled:
+                cur.execute(
+                    "SELECT status FROM orders WHERE LOWER(order_id) = LOWER(%s) AND LOWER(username) = LOWER(%s)",
+                    (clean_id, username)
+                )
+                row = cur.fetchone()
+                if not row:
+                    return jsonify({"success": False, "message": "Order not found under your account"}), 404
+                return jsonify({"success": False, "message": f"Order is already {row.get('status')} and cannot be cancelled"}), 409
+
+            conn.commit()
+            return jsonify({"success": True, "message": "Order cancelled successfully"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+

@@ -441,6 +441,32 @@ def rider_deliver_order(order_id):
     return _advance_rider_order(order_id, "delivered")
 
 
+@rider_bp.post("/rider/orders/<order_id>/cancel")
+def rider_cancel_order(order_id):
+    payload = auth.get_user_info()
+    if not payload or payload.get("user_type") != "rider":
+        return jsonify({"success": False, "message": "Rider authorization required"}), 403
+    username = payload["username"]
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(load_query("rider.sql", "cancel_rider_order"), (order_id.strip(), username.strip()))
+            cancelled = cur.fetchone()
+            if not cancelled:
+                cur.execute(
+                    "SELECT status FROM orders WHERE LOWER(order_id) = LOWER(%s) AND LOWER(rider_username) = LOWER(%s)",
+                    (order_id.strip(), username.strip())
+                )
+                row = cur.fetchone()
+                if not row:
+                    return jsonify({"success": False, "message": "Order not found or not assigned to you"}), 404
+                return jsonify({"success": False, "message": f"Order is already {row.get('status')} and cannot be cancelled"}), 409
+
+            conn.commit()
+            return jsonify({"success": True, "message": "Order cancelled successfully"}), 200
+    except psycopg.Error as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 def _advance_rider_order(order_id, action):
     payload = auth.get_user_info()
     if not payload or payload.get("user_type") != "rider":
