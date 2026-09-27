@@ -99,10 +99,10 @@ export default async function LandingPage() {
           <div className="flex items-end justify-between gap-4">
             <div>
               <p className="text-sm font-medium uppercase tracking-[0.22em] text-amber-700">
-                {isLive ? "Live from Neon" : "Popular restaurants"}
+                Featured restaurants
               </p>
               <h2 className="mt-2 text-2xl font-semibold text-slate-900">
-                {isLive ? "Top Dhaka restaurants" : "Quick picks people keep ordering"}
+                Top Dhaka restaurants
               </h2>
             </div>
             <Link href="/home" prefetch={false} className="text-sm font-medium text-amber-700 hover:underline">

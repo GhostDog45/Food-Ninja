@@ -560,7 +560,7 @@ export default function OrderHistoryPage() {
                 disabled={isSubmittingReview}
                 className="rounded-full bg-amber-500 px-6 py-2 text-xs font-semibold text-white shadow-sm hover:bg-amber-600 transition disabled:opacity-50"
               >
-                {isSubmittingReview ? "Saving to Neon..." : "Submit Review"}
+                {isSubmittingReview ? "Submitting Review..." : "Submit Review"}
               </button>
             </div>
           </form>
