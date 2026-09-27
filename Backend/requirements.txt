@@ -8,3 +8,4 @@ python-dotenv>=1.0.0
 requests>=2.31.0
 flask-sock>=0.7.0
 gunicorn>=22.0.0
+cloudinary>=1.41.0

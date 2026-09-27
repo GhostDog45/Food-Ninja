@@ -1,9 +1,20 @@
 import os
 import uuid
+import io
+import logging
 from flask import Blueprint, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 from db import get_connection, load_query
 import auth
+
+try:
+    import cloudinary
+    import cloudinary.uploader
+    CLOUDINARY_AVAILABLE = True
+except ImportError:
+    CLOUDINARY_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 uploads_bp = Blueprint("uploads", __name__)
 
@@ -16,14 +27,25 @@ for folder in ["profiles", "foods", "categories"]:
     os.makedirs(os.path.join(BACKEND_UPLOADS_DIR, folder), exist_ok=True)
 
 
+def _get_clean_cloudinary_url():
+    raw = os.getenv("CLOUDINARY_URL") or ""
+    val = raw.strip()
+    if val.startswith("CLOUDINARY_URL="):
+        val = val[len("CLOUDINARY_URL="):].strip()
+    val = val.replace("<", "").replace(">", "").strip("'\"")
+    return val if val.startswith("cloudinary://") else None
+
+
 def _allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 def _save_file(file_storage, subfolder: str, prefix: str):
     """
-    Validates file size (<= 5MB) and extension, saves to backend uploads folder.
-    Returns (relative_url, error_message)
+    Validates file size (<= 5MB) and extension.
+    If Cloudinary is configured via CLOUDINARY_URL, uploads directly to Cloudinary and returns secure HTTPS URL.
+    Otherwise, saves to backend uploads folder (Backend/uploads/<subfolder>/...) and returns relative path.
+    Returns (url, error_message)
     """
     if not file_storage or not file_storage.filename:
         return None, "No file provided"
@@ -36,12 +58,35 @@ def _save_file(file_storage, subfolder: str, prefix: str):
     if len(content) > MAX_FILE_SIZE:
         return None, f"Picture size exceeds the 5 MB limit (file size: {len(content) / (1024 * 1024):.2f} MB)"
 
-    ext = file_storage.filename.rsplit(".", 1)[1].lower()
     clean_prefix = secure_filename(prefix)
-    filename = f"{clean_prefix}_{uuid.uuid4().hex[:8]}.{ext}"
+    public_id = f"{clean_prefix}_{uuid.uuid4().hex[:8]}"
 
-    # Save to Backend/uploads/<subfolder>/
-    backend_dest = os.path.join(BACKEND_UPLOADS_DIR, subfolder, filename)
+    # 1. Try Cloudinary upload if configured (ideal for Render and production hosting)
+    c_url = _get_clean_cloudinary_url()
+    if CLOUDINARY_AVAILABLE and c_url:
+        try:
+            cloudinary.reset_config()
+            os.environ["CLOUDINARY_URL"] = c_url
+            upload_res = cloudinary.uploader.upload(
+                io.BytesIO(content),
+                folder=f"food_ninja/{subfolder}",
+                public_id=public_id,
+                resource_type="image",
+                overwrite=True
+            )
+            secure_url = upload_res.get("secure_url") or upload_res.get("url")
+            if secure_url:
+                return secure_url, None
+        except Exception as e:
+            logger.warning(f"Cloudinary upload failed: {e}. Falling back to local storage.")
+
+    # 2. Local filesystem storage (fallback or local development)
+    ext = file_storage.filename.rsplit(".", 1)[1].lower()
+    filename = f"{public_id}.{ext}"
+
+    target_dir = os.path.join(BACKEND_UPLOADS_DIR, subfolder)
+    os.makedirs(target_dir, exist_ok=True)
+    backend_dest = os.path.join(target_dir, filename)
     with open(backend_dest, "wb") as f:
         f.write(content)
 
