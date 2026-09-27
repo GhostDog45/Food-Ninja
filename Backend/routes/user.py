@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify
 from db import get_connection, load_query
 import auth
 from utils import calculate_order_delivery_time, calculate_delivery_charge
+from routes.owner import is_restaurant_open_now
 
 user_bp = Blueprint("user", __name__)
 
@@ -88,7 +89,11 @@ def get_nearby_restaurants():
                 restaurants = []
                 for r in rows:
                     dist_m = float(r.get("distance_meters") or 0.0)
-                    r_status = (r.get("status") or "closed").strip().lower()
+                    r_raw_status = (r.get("status") or "closed").strip().lower()
+                    if r_raw_status not in ("banned", "shutdown", "pending") and r.get("open_time") and r.get("close_time"):
+                        r_status = "open" if is_restaurant_open_now(r.get("open_time"), r.get("close_time")) else "closed"
+                    else:
+                        r_status = r_raw_status
                     r_lat = float(r["latitude"]) if r.get("latitude") is not None else None
                     r_lon = float(r["longitude"]) if r.get("longitude") is not None else None
 
@@ -211,7 +216,7 @@ def get_restaurant_detail(restaurant_id):
                     "picture_url": restaurant.get("picture_url"),
                     "open_time": str(restaurant["open_time"]) if restaurant.get("open_time") else None,
                     "close_time": str(restaurant["close_time"]) if restaurant.get("close_time") else None,
-                    "status": (restaurant.get("status") or "closed").strip().lower(),
+                    "status": "open" if (restaurant.get("status") or "").strip().lower() not in ("banned", "shutdown", "pending") and is_restaurant_open_now(restaurant.get("open_time"), restaurant.get("close_time")) else (restaurant.get("status") or "closed").strip().lower(),
                     "distance_meters": dist_m,
                     "distance_km": round(dist_m / 1000.0, 2),
                     "within_5km": is_within_range,

@@ -25,6 +25,7 @@ export function AppShell({
 }) {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
@@ -42,6 +43,15 @@ export function AppShell({
     } catch {
       router.push("/login");
     }
+  }
+
+  function handleRefresh() {
+    setIsRefreshing(true);
+    window.location.reload();
+  }
+
+  function handleBack() {
+    router.back();
   }
 
   return (
@@ -66,6 +76,33 @@ export function AppShell({
 
               <div className="flex items-center justify-end gap-2">
                 {actions}
+
+                {/* Back and Refresh Navigation Controls (left of sign out) */}
+                <div className="flex items-center gap-1.5 border-l border-black/10 pl-2">
+                  <button
+                    type="button"
+                    onClick={handleBack}
+                    title="Previous page (Back without reloading)"
+                    aria-label="Previous page"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 bg-white text-slate-600 shadow-2xs hover:bg-amber-50 hover:border-amber-300 hover:text-amber-900 transition active:scale-95 cursor-pointer"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRefresh}
+                    title="Refresh page"
+                    aria-label="Refresh page"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 bg-white text-slate-600 shadow-2xs hover:bg-amber-50 hover:border-amber-300 hover:text-amber-900 transition active:scale-95 cursor-pointer"
+                  >
+                    <svg className={`h-4 w-4 ${isRefreshing ? "animate-spin text-amber-600" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                  </button>
+                </div>
+
                 {user ? (
                   <button
                     type="button"

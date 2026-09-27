@@ -1,37 +1,32 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 export default function Loading() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    // Only display loading wheel if loading takes more than 1 second (1000ms)
+    const timer = setTimeout(() => {
+      setVisible(true);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!visible) return null;
+
   return (
-    <main className="min-h-screen bg-[#f6f1e8] px-4 py-6 text-slate-900 animate-pulse">
-      <div className="mx-auto max-w-7xl space-y-8">
-        {/* Header Skeleton */}
-        <div className="flex items-center justify-between rounded-[28px] border border-black/5 bg-white/80 px-5 py-4 shadow-sm backdrop-blur">
-          <div className="space-y-1.5">
-            <div className="h-3 w-24 rounded-full bg-amber-200/60" />
-            <div className="h-4 w-56 rounded-full bg-slate-200" />
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-18 rounded-full bg-slate-100" />
-            <div className="h-9 w-28 rounded-full bg-amber-300/70" />
-          </div>
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/10 backdrop-blur-[2px] transition-all duration-300"
+    >
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-black/10 bg-white/95 px-6 py-5 shadow-xl backdrop-blur-md">
+        <div className="relative flex h-8 w-8 items-center justify-center">
+          <div className="h-8 w-8 rounded-full border-[2.5px] border-amber-200 border-t-amber-500 animate-spin" />
         </div>
-
-        {/* Hero Section Skeleton */}
-        <section className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
-          <div className="rounded-[36px] border border-black/5 bg-white p-8 shadow-sm md:p-12 space-y-6">
-            <div className="h-7 w-48 rounded-full bg-amber-100" />
-            <div className="space-y-3">
-              <div className="h-10 w-3/4 rounded-2xl bg-slate-200" />
-              <div className="h-5 w-full rounded-xl bg-slate-100" />
-            </div>
-            <div className="h-14 rounded-2xl bg-slate-100" />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="min-h-72 rounded-[30px] bg-slate-200/80 sm:row-span-2" />
-            <div className="min-h-44 rounded-[30px] bg-slate-200/80" />
-            <div className="min-h-44 rounded-[30px] bg-slate-200/80" />
-          </div>
-        </section>
+        <p className="text-xs font-semibold text-slate-700 tracking-wide">Loading...</p>
       </div>
-    </main>
+    </div>
   );
 }

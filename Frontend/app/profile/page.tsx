@@ -22,6 +22,7 @@ import {
   type UserProfile,
 } from "@/lib/backend";
 import { OSMLocationPicker } from "@/components/osm-location-picker";
+import { ImageCropModal } from "@/components/image-crop-modal";
 
 export default function CustomerProfilePage() {
   const router = useRouter();
@@ -30,6 +31,13 @@ export default function CustomerProfilePage() {
   const [user, setUser] = useState<{ username: string; user_type: string; email?: string } | null>(null);
   const [liveProfile, setLiveProfile] = useState<UserProfile | null>(null);
   const [uploadingPfp, setUploadingPfp] = useState(false);
+  const [cropModal, setCropModal] = useState<{
+    open: boolean;
+    imageSrc: string;
+  }>({
+    open: false,
+    imageSrc: "",
+  });
   const [profileDetails, setProfileDetails] = useState<Record<string, any> | null>(null);
 
   // Location state
@@ -93,26 +101,37 @@ export default function CustomerProfilePage() {
     }
   }, []);
 
-  async function handlePfpUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  function handlePfpFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast(`Picture exceeds the 5 MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please select a file smaller than 5 MB.`, "danger");
+    if (file.size > 10 * 1024 * 1024) {
+      toast("Picture exceeds 10 MB limit. Please select an image under 10 MB.", "danger");
       e.target.value = "";
       return;
     }
 
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCropModal({
+        open: true,
+        imageSrc: reader.result as string,
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+
+  async function handleCropComplete(croppedFile: File) {
     setUploadingPfp(true);
     try {
-      const res = await apiUploadUserPfp(file);
+      const res = await apiUploadUserPfp(croppedFile);
       toast(res.message || "Profile picture updated successfully!", "success");
       setLiveProfile((prev) => (prev ? { ...prev, pfp_url: res.pfp_url } : null));
     } catch (err: any) {
       toast(err.message || "Failed to upload profile picture", "danger");
     } finally {
       setUploadingPfp(false);
-      e.target.value = "";
     }
   }
 
@@ -313,7 +332,7 @@ export default function CustomerProfilePage() {
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/webp,image/gif"
-                      onChange={handlePfpUpload}
+                      onChange={handlePfpFileSelect}
                       disabled={uploadingPfp}
                       className="hidden"
                     />
@@ -632,6 +651,15 @@ export default function CustomerProfilePage() {
           </Panel>
         </div>
       </div>
+
+      <ImageCropModal
+        open={cropModal.open}
+        imageSrc={cropModal.imageSrc}
+        aspectRatio="square"
+        title="Crop & Scale Profile Picture"
+        onClose={() => setCropModal((prev) => ({ ...prev, open: false }))}
+        onCropComplete={handleCropComplete}
+      />
     </AppShell>
   );
 }

@@ -10,6 +10,25 @@ import uuid
 owner_bp = Blueprint("owner", __name__)
 
 
+def is_restaurant_open_now(open_time_str, close_time_str):
+    if not open_time_str or not close_time_str:
+        return True
+    try:
+        import datetime
+        now = datetime.datetime.now()
+        now_mins = now.hour * 60 + now.minute
+        o_parts = [int(p) for p in str(open_time_str).split(":")[:2]]
+        c_parts = [int(p) for p in str(close_time_str).split(":")[:2]]
+        o_mins = o_parts[0] * 60 + o_parts[1]
+        c_mins = c_parts[0] * 60 + c_parts[1]
+        if o_mins <= c_mins:
+            return o_mins <= now_mins < c_mins
+        else:
+            return now_mins >= o_mins or now_mins < c_mins
+    except Exception:
+        return True
+
+
 def approved_owner_required():
     payload = auth.get_user_info()
     if payload is None or payload.get("user_type") != "owner":
@@ -86,6 +105,9 @@ def owner_restaurants():
                     query = load_query("owner.sql", "get_owner_restaurants")
                     cur.execute(query, (username,))
                     rows = cur.fetchall() or []
+                    for row in rows:
+                        if row.get("status") not in ("pending", "banned", "shutdown"):
+                            row["status"] = "open" if is_restaurant_open_now(row.get("open_time"), row.get("close_time")) else "closed"
 
                     return jsonify({
                         "success": True,
@@ -229,6 +251,8 @@ def owner_restaurant_detail(restaurant_id):
                 restaurant = cur.fetchone()
                 if not restaurant:
                     return jsonify({"success": False, "message": "Restaurant not found"}), 404
+                if restaurant.get("status") not in ("pending", "banned", "shutdown"):
+                    restaurant["status"] = "open" if is_restaurant_open_now(restaurant.get("open_time"), restaurant.get("close_time")) else "closed"
                 cur.execute(load_query("owner.sql", "get_owner_foods"), (restaurant_id, restaurant_id, owner_id))
                 return jsonify({"success": True, "restaurant": restaurant, "foods": cur.fetchall() or []}), 200
 
@@ -238,11 +262,16 @@ def owner_restaurant_detail(restaurant_id):
             status = data.get("status")
             if status not in ("open", "closed", "shutdown"):
                 return jsonify({"success": False, "message": "Status must be open, closed, or shutdown"}), 400
+
+            # Auto-toggle status with system time if not explicitly shutdown
+            if status != "shutdown" and open_time and close_time:
+                status = "open" if is_restaurant_open_now(open_time, close_time) else "closed"
+
             cur.execute(load_query("owner.sql", "update_owner_restaurant"), (open_time, close_time, status, restaurant_id, owner_id))
             if cur.rowcount == 0:
                 return jsonify({"success": False, "message": "Restaurant not found"}), 404
             conn.commit()
-            return jsonify({"success": True, "message": "Restaurant updated"}), 200
+            return jsonify({"success": True, "message": f"Restaurant updated. Currently {status.upper()}", "status": status}), 200
     except psycopg.Error:
         return jsonify({"success": False, "message": "Database error"}), 500
 

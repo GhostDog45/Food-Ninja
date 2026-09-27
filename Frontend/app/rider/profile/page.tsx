@@ -15,12 +15,20 @@ import {
   type RiderProfile,
 } from "@/lib/backend";
 import { OSMLocationPicker } from "@/components/osm-location-picker";
+import { ImageCropModal } from "@/components/image-crop-modal";
 
 export default function RiderProfilePage() {
   const { toast } = useToast();
   const [profile, setProfile] = useState<RiderProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploadingPfp, setUploadingPfp] = useState(false);
+  const [cropModal, setCropModal] = useState<{
+    open: boolean;
+    imageSrc: string;
+  }>({
+    open: false,
+    imageSrc: "",
+  });
 
   // Static base location state
   const [isEditingLocation, setIsEditingLocation] = useState(false);
@@ -65,29 +73,37 @@ export default function RiderProfilePage() {
     loadProfile();
   }, []);
 
-  async function handlePfpUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  function handlePfpFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast(
-        `Picture exceeds the 5 MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please select a file smaller than 5 MB.`,
-        "danger"
-      );
+    if (file.size > 10 * 1024 * 1024) {
+      toast("Picture exceeds 10 MB limit. Please select an image under 10 MB.", "danger");
       e.target.value = "";
       return;
     }
 
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCropModal({
+        open: true,
+        imageSrc: reader.result as string,
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+
+  async function handleCropComplete(croppedFile: File) {
     setUploadingPfp(true);
     try {
-      const res = await apiUploadRiderPfp(file);
+      const res = await apiUploadRiderPfp(croppedFile);
       toast(res.message || "Rider profile picture updated successfully!", "success");
       setProfile((prev) => (prev ? { ...prev, pfp_url: res.pfp_url } : null));
     } catch (err: any) {
       toast(err.message || "Failed to upload rider profile picture", "danger");
     } finally {
       setUploadingPfp(false);
-      e.target.value = "";
     }
   }
 
@@ -300,7 +316,7 @@ export default function RiderProfilePage() {
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/webp,image/gif"
-                      onChange={handlePfpUpload}
+                      onChange={handlePfpFileSelect}
                       disabled={uploadingPfp}
                       className="hidden"
                     />
@@ -389,6 +405,15 @@ export default function RiderProfilePage() {
             </div>
           </Panel>
       </div>
+
+      <ImageCropModal
+        open={cropModal.open}
+        imageSrc={cropModal.imageSrc}
+        aspectRatio="square"
+        title="Crop & Scale Rider Profile Picture"
+        onClose={() => setCropModal((prev) => ({ ...prev, open: false }))}
+        onCropComplete={handleCropComplete}
+      />
     </AppShell>
   );
 }
