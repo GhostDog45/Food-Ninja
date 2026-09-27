@@ -287,3 +287,62 @@ def upsert_food_category():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
+
+# -----------------------------------------------------------------------------
+# 4. Owner Restaurant Picture Upload & Delete
+# -----------------------------------------------------------------------------
+@uploads_bp.route("/owner/restaurants/<restaurant_id>/picture", methods=["POST", "DELETE"])
+def manage_restaurant_picture(restaurant_id):
+    payload = auth.get_user_info()
+    if not payload or payload.get("user_type") != "owner":
+        return jsonify({"success": False, "message": "Restaurant owner authorization required"}), 401
+
+    owner_id = payload["username"]
+
+    if request.method == "DELETE":
+        try:
+            with get_connection() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE restaurant SET picture_url = NULL WHERE restaurant_id = %s AND owner_id = %s",
+                    (restaurant_id, owner_id)
+                )
+                if cur.rowcount == 0:
+                    return jsonify({"success": False, "message": "Restaurant not found under your ownership"}), 404
+                conn.commit()
+
+            return jsonify({
+                "success": True,
+                "message": "Restaurant picture removed successfully!",
+                "picture_url": None
+            }), 200
+        except Exception as e:
+            return jsonify({"success": False, "message": str(e)}), 500
+
+    # POST - Upload or change picture
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "No file field 'file' in upload request"}), 400
+
+    file_obj = request.files["file"]
+    picture_url, err = _save_file(file_obj, "restaurants", f"restaurant_{restaurant_id}")
+    if err:
+        return jsonify({"success": False, "message": err}), 400
+
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE restaurant SET picture_url = %s WHERE restaurant_id = %s AND owner_id = %s",
+                (picture_url, restaurant_id, owner_id)
+            )
+            if cur.rowcount == 0:
+                return jsonify({"success": False, "message": "Restaurant not found under your ownership"}), 404
+            conn.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Restaurant picture updated successfully!",
+            "picture_url": picture_url
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+

@@ -17,6 +17,8 @@ import {
   apiUpdateOwnerFood,
   apiUpdateOwnerRestaurant,
   apiUploadFoodPicture,
+  apiUploadRestaurantPicture,
+  apiDeleteRestaurantPicture,
   getImageUrl,
   type OwnerFood,
   type OwnerOrder,
@@ -33,6 +35,7 @@ export default function OwnerRestaurantDetailPage() {
   const [status, setStatus] = useState<"open" | "closed" | "shutdown">("closed");
   const [categories, setCategories] = useState<string[]>([]);
   const [uploadingFoodId, setUploadingFoodId] = useState<string | null>(null);
+  const [uploadingRestaurantPic, setUploadingRestaurantPic] = useState(false);
   const [newFood, setNewFood] = useState({
     name: "",
     category: "",
@@ -153,6 +156,46 @@ export default function OwnerRestaurantDetailPage() {
     }
   }
 
+  async function handleRestaurantPictureUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast(
+        `Picture exceeds 5 MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please select an image under 5 MB.`,
+        "danger"
+      );
+      e.target.value = "";
+      return;
+    }
+
+    setUploadingRestaurantPic(true);
+    try {
+      const res = await apiUploadRestaurantPicture(params.id, file);
+      toast(res.message || "Restaurant picture updated!", "success");
+      setRestaurant((prev) => (prev ? { ...prev, picture_url: res.picture_url } : prev));
+    } catch (err: any) {
+      toast(err.message || "Failed to upload restaurant picture", "danger");
+    } finally {
+      setUploadingRestaurantPic(false);
+      e.target.value = "";
+    }
+  }
+
+  async function handleRestaurantPictureDelete() {
+    if (!window.confirm("Are you sure you want to remove the restaurant picture?")) return;
+    setUploadingRestaurantPic(true);
+    try {
+      await apiDeleteRestaurantPicture(params.id);
+      toast("Restaurant picture removed!", "success");
+      setRestaurant((prev) => (prev ? { ...prev, picture_url: null } : prev));
+    } catch (err: any) {
+      toast(err.message || "Failed to remove restaurant picture", "danger");
+    } finally {
+      setUploadingRestaurantPic(false);
+    }
+  }
+
   async function cancelOrder(orderId: string) {
     try {
       await apiCancelOwnerOrder(params.id, orderId);
@@ -239,6 +282,51 @@ export default function OwnerRestaurantDetailPage() {
                 ? "Open"
                 : "Closed"}
             </Badge>
+          </div>
+
+          {/* Restaurant Cover Image Section */}
+          <div className="relative overflow-hidden rounded-2xl border border-black/10 bg-slate-50">
+            <div className="relative h-44 sm:h-56 w-full">
+              {restaurant.picture_url ? (
+                <Image
+                  src={getImageUrl(restaurant.picture_url)}
+                  alt={restaurant.name}
+                  fill
+                  className="object-cover"
+                  unoptimized
+                />
+              ) : (
+                <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 text-slate-400">
+                  <span className="text-4xl">🍽️</span>
+                  <span className="text-sm font-medium text-slate-500">No restaurant image uploaded yet</span>
+                </div>
+              )}
+
+              {/* Action Buttons Overlay */}
+              <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl bg-white/95 px-3.5 py-2 text-xs font-bold text-slate-800 shadow-sm border border-slate-200 backdrop-blur-sm hover:bg-white hover:border-amber-300 transition">
+                  {uploadingRestaurantPic ? "Uploading..." : restaurant.picture_url ? "📷 Change Picture" : "📷 Upload Picture"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    className="hidden"
+                    disabled={uploadingRestaurantPic}
+                    onChange={handleRestaurantPictureUpload}
+                  />
+                </label>
+
+                {restaurant.picture_url && (
+                  <button
+                    type="button"
+                    onClick={handleRestaurantPictureDelete}
+                    disabled={uploadingRestaurantPic}
+                    className="inline-flex items-center gap-1 rounded-xl bg-rose-600/90 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-rose-700 transition"
+                  >
+                    🗑️ Remove
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

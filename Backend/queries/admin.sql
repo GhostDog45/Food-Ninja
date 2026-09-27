@@ -74,7 +74,7 @@ WHERE owner_id = %s;
 
 --name:get_all_restaurants
 SELECT R.restaurant_id, R.name, R.owner_id, O.name AS owner_name,
-       R.open_time::text, R.close_time::text, R.status
+       R.open_time::text, R.close_time::text, R.status, R.picture_url
 FROM restaurant R
 LEFT JOIN restaurant_owner O ON R.owner_id = O.owner_id
 WHERE R.status = 'pending'
@@ -83,7 +83,7 @@ LIMIT 25 OFFSET %s;
 
 --name:get_restaurants_by_status
 SELECT R.restaurant_id, R.name, R.owner_id, O.name AS owner_name,
-       R.open_time::text, R.close_time::text, R.status
+       R.open_time::text, R.close_time::text, R.status, R.picture_url
 FROM restaurant R
 LEFT JOIN restaurant_owner O ON R.owner_id = O.owner_id
 WHERE (
@@ -177,7 +177,7 @@ WHERE restaurant_id = %s;
 SELECT R.restaurant_id, R.owner_id, R.name,
        ST_Y(R.location::geometry) AS latitude,
        ST_X(R.location::geometry) AS longitude,
-       R.open_time::text, R.close_time::text, R.status,
+       R.open_time::text, R.close_time::text, R.status, R.picture_url,
        O.name AS owner_name, O.email AS owner_email, O.phone AS owner_phone,
        O.nid AS owner_nid
 FROM restaurant R

@@ -231,13 +231,27 @@ export default function RestaurantDetailsPage() {
 
               {/* Restaurant Header Card */}
               <Panel className="space-y-5 p-6 overflow-hidden">
-                <div className="relative flex h-36 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 border border-amber-200/40">
-                  <div className="flex flex-col items-center gap-2 text-center">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500 text-white shadow-md text-2xl">
-                      🍽️
+                <div className="relative flex h-40 sm:h-48 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 border border-amber-200/40 overflow-hidden">
+                  {restaurant.picture_url ? (
+                    <>
+                      <img
+                        src={getImageUrl(restaurant.picture_url)}
+                        alt={restaurant.name}
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-black/20" />
+                      <div className="relative z-10 flex flex-col items-center gap-1 text-center drop-shadow-md">
+                        <span className="text-xl font-extrabold text-white sm:text-2xl drop-shadow">{restaurant.name}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 text-center">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500 text-white shadow-md text-2xl">
+                        🍽️
+                      </div>
+                      <span className="text-sm font-bold text-slate-800">{restaurant.name}</span>
                     </div>
-                    <span className="text-sm font-bold text-slate-800">{restaurant.name}</span>
-                  </div>
+                  )}
                   <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
                     <Badge tone={restaurant.status === "open" ? "success" : "danger"}>
                       {restaurant.status === "open" ? "Open" : "Closed"}

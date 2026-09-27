@@ -56,7 +56,8 @@ CREATE TABLE restaurant (
 	location geography(Point, 4326) NOT NULL,
 	open_time time NOT NULL,
 	close_time time NOT NULL,
-	status varchar(20) DEFAULT 'closed' CHECK (status IN ('pending', 'open', 'closed', 'banned'))
+	status varchar(20) DEFAULT 'closed' CHECK (status IN ('pending', 'open', 'closed', 'banned')),
+	picture_url text
 );
 
 CREATE TABLE foods (

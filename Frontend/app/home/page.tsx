@@ -573,19 +573,27 @@ export default function CustomerHomePage() {
                           <Panel key={restaurant.restaurant_id} className="space-y-4 overflow-hidden p-5 flex flex-col justify-between">
                             <div className="space-y-4">
                               {/* Restaurant Card Header */}
-                              <div className="relative flex h-32 w-full items-center justify-center rounded-2xl bg-gradient-to-tr from-slate-100 via-amber-50 to-orange-50 border border-black/5">
-                                <div className="flex flex-col items-center gap-1.5 text-center">
-                                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm text-lg">
-                                    🍽️
+                              <div className="relative flex h-32 w-full items-center justify-center rounded-2xl bg-gradient-to-tr from-slate-100 via-amber-50 to-orange-50 border border-black/5 overflow-hidden">
+                                {restaurant.picture_url ? (
+                                  <img
+                                    src={getImageUrl(restaurant.picture_url)}
+                                    alt={restaurant.name}
+                                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                                  />
+                                ) : (
+                                  <div className="flex flex-col items-center gap-1.5 text-center">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm text-lg">
+                                      🍽️
+                                    </div>
+                                    <span className="text-xs font-semibold text-slate-700">{restaurant.name}</span>
                                   </div>
-                                  <span className="text-xs font-semibold text-slate-700">{restaurant.name}</span>
-                                </div>
-                                <div className="absolute top-2.5 right-2.5">
+                                )}
+                                <div className="absolute top-2.5 right-2.5 z-10">
                                   <Badge tone={restaurant.status === "open" ? "success" : "danger"}>
                                     {restaurant.status === "open" ? "Open" : "Closed"}
                                   </Badge>
                                 </div>
-                                <div className="absolute bottom-2.5 left-2.5 flex flex-wrap items-center gap-1.5">
+                                <div className="absolute bottom-2.5 left-2.5 flex flex-wrap items-center gap-1.5 z-10">
                                   <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/90 bg-white/95 px-2.5 py-0.5 text-[11px] font-bold text-slate-800 shadow-sm backdrop-blur-sm">
                                     📍 {restaurant.distance_km} km
                                   </span>

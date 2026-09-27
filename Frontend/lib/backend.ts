@@ -563,6 +563,7 @@ export type OwnerRestaurant = {
   open_time: string;
   close_time: string;
   status: string;
+  picture_url?: string | null;
 };
 
 export async function apiGetOwnerRestaurants(): Promise<OwnerRestaurant[]> {
@@ -1038,6 +1039,7 @@ export type CustomerNearbyRestaurant = {
   open_time: string | null;
   close_time: string | null;
   status: string;
+  picture_url?: string | null;
   distance_meters: number;
   distance_km: number;
   delivery_time_mins?: number;
@@ -1077,6 +1079,7 @@ export type CustomerSearchResult = {
   restaurant_id: string;
   restaurant_name: string;
   restaurant_status: string;
+  restaurant_picture_url?: string | null;
   distance_meters: number;
   distance_km: number;
   restaurant_rating: number;
@@ -1665,6 +1668,47 @@ export async function apiUploadFoodPicture(restaurantId: string, foodId: string,
   if (!res.ok || !data.success) throw new Error(data.message || "Failed to upload food picture");
   return data;
 }
+
+export async function apiUploadRestaurantPicture(restaurantId: string, file: File): Promise<{ success: boolean; message: string; picture_url: string }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error(`File size exceeds 5 MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please select a smaller image.`);
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BACKEND_URL}/owner/restaurants/${encodeURIComponent(restaurantId)}/picture`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to upload restaurant picture");
+  return data;
+}
+
+export async function apiDeleteRestaurantPicture(restaurantId: string): Promise<{ success: boolean; message: string }> {
+  const token = getAuthToken();
+  if (!token) throw new Error("Authentication required. Please log in.");
+
+  const res = await fetch(`${BACKEND_URL}/owner/restaurants/${encodeURIComponent(restaurantId)}/picture`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to delete restaurant picture");
+  return data;
+}
+
 
 
 

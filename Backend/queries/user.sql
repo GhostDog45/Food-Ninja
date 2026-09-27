@@ -19,6 +19,7 @@ SELECT
     R.open_time::text,
     R.close_time::text,
     R.status,
+    R.picture_url,
     ROUND(ST_Distance(R.location, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography)::numeric, 1) AS distance_meters,
     COALESCE(ROUND(AVG(RV.restaurant_rating)::numeric, 1), 0.0) AS avg_rating,
     COUNT(DISTINCT RV.order_id) AS review_count,
@@ -30,7 +31,7 @@ LEFT JOIN orders O ON C.cart_id = O.cart_id
 LEFT JOIN review RV ON O.order_id = RV.order_id
 WHERE ST_DWithin(R.location, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography, 5000)
   AND R.status IN ('open', 'closed')
-GROUP BY R.restaurant_id, R.name, R.location, R.open_time, R.close_time, R.status
+GROUP BY R.restaurant_id, R.name, R.location, R.open_time, R.close_time, R.status, R.picture_url
 ORDER BY distance_meters ASC;
 
 --name:get_restaurant_details
@@ -42,6 +43,7 @@ SELECT
     R.open_time::text,
     R.close_time::text,
     R.status,
+    R.picture_url,
     ROUND(ST_Distance(R.location, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography)::numeric, 1) AS distance_meters,
     COALESCE(ROUND(AVG(RV.restaurant_rating)::numeric, 1), 0.0) AS avg_rating,
     COUNT(DISTINCT RV.order_id) AS review_count,
@@ -53,7 +55,7 @@ LEFT JOIN orders O ON C.cart_id = O.cart_id
 LEFT JOIN review RV ON O.order_id = RV.order_id
 WHERE R.restaurant_id = %s
   AND R.status IN ('open', 'closed')
-GROUP BY R.restaurant_id, R.name, R.location, R.open_time, R.close_time, R.status;
+GROUP BY R.restaurant_id, R.name, R.location, R.open_time, R.close_time, R.status, R.picture_url;
 
 --name:get_restaurant_foods
 SELECT 
@@ -105,6 +107,7 @@ SELECT
     R.restaurant_id,
     R.name AS restaurant_name,
     R.status AS restaurant_status,
+    R.picture_url AS restaurant_picture_url,
     ROUND(ST_Distance(R.location, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography)::numeric, 1) AS distance_meters,
     COALESCE(ROUND(AVG(RV.restaurant_rating)::numeric, 1), 0.0) AS avg_rating,
     COUNT(DISTINCT O.username) AS people_ordered_count
@@ -117,7 +120,7 @@ WHERE ST_DWithin(R.location, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography, 
   AND R.status IN ('open', 'closed')
   AND (%s::text IS NULL OR LOWER(F.category) = LOWER(%s))
   AND (%s::text IS NULL OR LOWER(F.name) LIKE LOWER(%s) OR LOWER(F.category) LIKE LOWER(%s) OR LOWER(R.name) LIKE LOWER(%s))
-GROUP BY F.food_id, F.name, F.category, F.price, F.discount, F.description, F.subcategory, F.picture_url, R.restaurant_id, R.name, R.status, R.location
+GROUP BY F.food_id, F.name, F.category, F.price, F.discount, F.description, F.subcategory, F.picture_url, R.restaurant_id, R.name, R.status, R.location, R.picture_url
 ORDER BY distance_meters ASC, F.name ASC
 LIMIT 50;
 

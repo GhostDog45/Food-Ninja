@@ -7,7 +7,7 @@ WHERE owner_id = %s;
 SELECT restaurant_id, name,
        ST_Y(location::geometry) AS latitude,
        ST_X(location::geometry) AS longitude,
-       open_time::text, close_time::text, status
+       open_time::text, close_time::text, status, picture_url
 FROM restaurant
 WHERE owner_id = %s
 ORDER BY name ASC;
@@ -21,7 +21,7 @@ WHERE owner_id = %s;
 SELECT restaurant_id, owner_id, name,
        ST_Y(location::geometry) AS latitude,
        ST_X(location::geometry) AS longitude,
-       open_time::text, close_time::text, status
+       open_time::text, close_time::text, status, picture_url
 FROM restaurant
 WHERE restaurant_id = %s AND owner_id = %s;
 
