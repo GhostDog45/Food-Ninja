@@ -90,8 +90,8 @@ def get_nearby_restaurants():
                 for r in rows:
                     dist_m = float(r.get("distance_meters") or 0.0)
                     r_raw_status = (r.get("status") or "closed").strip().lower()
-                    if r_raw_status not in ("banned", "shutdown", "pending") and r.get("open_time") and r.get("close_time"):
-                        r_status = "open" if is_restaurant_open_now(r.get("open_time"), r.get("close_time")) else "closed"
+                    if r_raw_status not in ("banned", "shutdown", "pending"):
+                        r_status = "open" if (r_raw_status == "open" or is_restaurant_open_now(r.get("open_time"), r.get("close_time"))) else "closed"
                     else:
                         r_status = r_raw_status
                     r_lat = float(r["latitude"]) if r.get("latitude") is not None else None
@@ -216,7 +216,7 @@ def get_restaurant_detail(restaurant_id):
                     "picture_url": restaurant.get("picture_url"),
                     "open_time": str(restaurant["open_time"]) if restaurant.get("open_time") else None,
                     "close_time": str(restaurant["close_time"]) if restaurant.get("close_time") else None,
-                    "status": "open" if (restaurant.get("status") or "").strip().lower() not in ("banned", "shutdown", "pending") and is_restaurant_open_now(restaurant.get("open_time"), restaurant.get("close_time")) else (restaurant.get("status") or "closed").strip().lower(),
+                    "status": "open" if (restaurant.get("status") or "").strip().lower() not in ("banned", "shutdown", "pending") and ((restaurant.get("status") or "").strip().lower() == "open" or is_restaurant_open_now(restaurant.get("open_time"), restaurant.get("close_time"))) else (restaurant.get("status") or "closed").strip().lower(),
                     "distance_meters": dist_m,
                     "distance_km": round(dist_m / 1000.0, 2),
                     "within_5km": is_within_range,
@@ -624,7 +624,7 @@ def checkout_cart():
                 cart_id = active_cart["cart_id"]
 
                 # Final stage server-side re-verification: Check restaurant operating status
-                cur.execute("SELECT status, name FROM restaurant WHERE restaurant_id = %s", (active_cart["restaurant_id"],))
+                cur.execute("SELECT status, name, open_time, close_time FROM restaurant WHERE restaurant_id = %s", (active_cart["restaurant_id"],))
                 r_status_row = cur.fetchone()
                 if not r_status_row:
                     return jsonify({
@@ -633,10 +633,17 @@ def checkout_cart():
                     }), 404
 
                 curr_status = (r_status_row.get("status") or "closed").strip().lower()
-                if curr_status != "open":
+                if curr_status in ("banned", "shutdown", "pending"):
                     return jsonify({
                         "success": False,
-                        "message": f"'{active_cart['restaurant_name']}' has closed since you added items to your cart. Orders cannot be processed while the restaurant is {curr_status}."
+                        "message": f"'{active_cart['restaurant_name']}' is currently {curr_status}. Orders cannot be processed."
+                    }), 400
+
+                is_open = (curr_status == "open") or is_restaurant_open_now(r_status_row.get("open_time"), r_status_row.get("close_time"))
+                if not is_open:
+                    return jsonify({
+                        "success": False,
+                        "message": f"'{active_cart['restaurant_name']}' has closed since you added items to your cart. Orders cannot be processed while the restaurant is closed."
                     }), 400
 
                 # 2. Get items and calculate bill

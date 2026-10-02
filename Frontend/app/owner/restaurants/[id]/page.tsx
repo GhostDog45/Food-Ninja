@@ -36,15 +36,20 @@ function computeStatusFromSystemTime(
   const now = new Date();
   const nowMins = now.getHours() * 60 + now.getMinutes();
 
-  const [oH, oM] = openTimeStr.slice(0, 5).split(":").map(Number);
-  const [cH, cM] = closeTimeStr.slice(0, 5).split(":").map(Number);
+  const [oH, oM] = (openTimeStr.slice(0, 5) || "00:00").split(":").map(Number);
+  const [cH, cM] = (closeTimeStr.slice(0, 5) || "00:00").split(":").map(Number);
   const openMins = (oH || 0) * 60 + (oM || 0);
   const closeMins = (cH || 0) * 60 + (cM || 0);
 
-  if (openMins <= closeMins) {
+  if (openMins === closeMins) {
+    // 24-hour schedule
+    return "open";
+  }
+
+  if (openMins < closeMins) {
     return nowMins >= openMins && nowMins < closeMins ? "open" : "closed";
   } else {
-    // Overnight operating window (e.g. 18:00 to 02:00)
+    // Overnight operating window (e.g. 18:00 to 02:00, or 10:00 to 00:00)
     return nowMins >= openMins || nowMins < closeMins ? "open" : "closed";
   }
 }
@@ -96,15 +101,7 @@ export default function OwnerRestaurantDetailPage() {
       setRestaurant(data.restaurant);
       setFoods(data.foods);
       setOrders(restaurantOrders);
-      const computed =
-        data.restaurant.status === "shutdown"
-          ? "shutdown"
-          : computeStatusFromSystemTime(
-              data.restaurant.open_time,
-              data.restaurant.close_time,
-              data.restaurant.status === "open" ? "open" : "closed"
-            );
-      setStatus(computed);
+      setStatus(data.restaurant.status as "open" | "closed" | "shutdown");
     } catch (error) {
       toast(error instanceof Error ? error.message : "Failed to load restaurant", "danger");
     } finally {
@@ -140,7 +137,7 @@ export default function OwnerRestaurantDetailPage() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
   async function handleStatusChange(nextStatus: "open" | "closed" | "shutdown") {
-    if (!restaurant || restaurant.status === "banned" || nextStatus === status) return;
+    if (!restaurant || restaurant.status === "banned") return;
     setUpdatingStatus(true);
     try {
       await apiUpdateOwnerRestaurant(params.id, {
@@ -149,6 +146,7 @@ export default function OwnerRestaurantDetailPage() {
         status: nextStatus,
       });
       setStatus(nextStatus);
+      setRestaurant((prev) => (prev ? { ...prev, status: nextStatus } : prev));
       toast(`Restaurant status changed to ${nextStatus.toUpperCase()}`, "success");
       await load();
     } catch (error) {
@@ -160,22 +158,14 @@ export default function OwnerRestaurantDetailPage() {
 
   function handleOpenTimeChange(newVal: string) {
     if (!restaurant) return;
-    const newOpen = `${newVal}:00`;
-    const nextStatus = computeStatusFromSystemTime(newOpen, restaurant.close_time, status);
-    setRestaurant({ ...restaurant, open_time: newOpen });
-    if (status !== "shutdown") {
-      setStatus(nextStatus);
-    }
+    const newOpen = newVal.length === 5 ? `${newVal}:00` : newVal;
+    setRestaurant((prev) => (prev ? { ...prev, open_time: newOpen } : prev));
   }
 
   function handleCloseTimeChange(newVal: string) {
     if (!restaurant) return;
-    const newClose = `${newVal}:00`;
-    const nextStatus = computeStatusFromSystemTime(restaurant.open_time, newClose, status);
-    setRestaurant({ ...restaurant, close_time: newClose });
-    if (status !== "shutdown") {
-      setStatus(nextStatus);
-    }
+    const newClose = newVal.length === 5 ? `${newVal}:00` : newVal;
+    setRestaurant((prev) => (prev ? { ...prev, close_time: newClose } : prev));
   }
 
   async function handleSaveHours() {
@@ -193,6 +183,7 @@ export default function OwnerRestaurantDetailPage() {
         status: newStatus,
       });
       setStatus(newStatus);
+      setRestaurant((prev) => (prev ? { ...prev, status: newStatus } : prev));
       toast(
         `Operating schedule saved. Restaurant is currently ${newStatus.toUpperCase()} based on system time`,
         "success"
@@ -581,7 +572,12 @@ export default function OwnerRestaurantDetailPage() {
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
                     Operating Schedule
                   </span>
-                  <p className="text-[11px] text-slate-500">Opening & closing timings</p>
+                  <p className="text-[11px] text-slate-500">
+                    Opening & closing timings · Schedule is currently{" "}
+                    <span className={computeStatusFromSystemTime(restaurant.open_time, restaurant.close_time, "closed") === "open" ? "font-bold text-emerald-600" : "font-bold text-rose-600"}>
+                      {computeStatusFromSystemTime(restaurant.open_time, restaurant.close_time, "closed") === "open" ? "OPEN" : "CLOSED"}
+                    </span>
+                  </p>
                 </div>
                 <button
                   type="button"
