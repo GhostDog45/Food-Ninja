@@ -156,7 +156,7 @@ export default function RiderDashboardPage() {
                         <img
                           src={getImageUrl(activeOrder.restaurant_picture_url)}
                           alt={activeOrder.restaurant_name}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-contain"
                         />
                       ) : (
                         <span className="text-2xl">🍽️</span>
@@ -180,7 +180,7 @@ export default function RiderDashboardPage() {
                         <img
                           src={getImageUrl(activeOrder.customer_pfp_url)}
                           alt={activeOrder.customer_name || "Customer"}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-contain"
                         />
                       ) : (
                         <span className="text-2xl">👤</span>
@@ -242,7 +242,7 @@ export default function RiderDashboardPage() {
                           <img
                             src={getImageUrl(currentOffer.restaurant_picture_url)}
                             alt={currentOffer.restaurant_name}
-                            className="h-full w-full object-cover"
+                            className="h-full w-full object-contain"
                           />
                         ) : (
                           <span className="text-lg">🍽️</span>
@@ -260,7 +260,7 @@ export default function RiderDashboardPage() {
                           <img
                             src={getImageUrl(currentOffer.customer_pfp_url)}
                             alt={currentOffer.customer_name || "Customer"}
-                            className="h-full w-full object-cover"
+                            className="h-full w-full object-contain"
                           />
                         ) : (
                           <span className="text-lg">👤</span>

@@ -43,13 +43,21 @@ export default function OwnerDashboardPage() {
                   className="text-left group"
                 >
                   <Panel className="space-y-4 p-5 transition hover:border-amber-300 hover:shadow-md">
-                    <div className="relative flex h-36 w-full items-center justify-center rounded-2xl bg-gradient-to-tr from-slate-100 via-amber-50 to-orange-50 border border-black/5 overflow-hidden">
+                    <div className="relative flex h-36 w-full items-center justify-center rounded-2xl bg-slate-900/5 border border-black/5 overflow-hidden">
                       {restaurant.picture_url ? (
-                        <img
-                          src={getImageUrl(restaurant.picture_url)}
-                          alt={restaurant.name}
-                          className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
+                        <>
+                          <img
+                            src={getImageUrl(restaurant.picture_url)}
+                            alt=""
+                            aria-hidden="true"
+                            className="absolute inset-0 h-full w-full object-cover blur-md opacity-25 scale-110"
+                          />
+                          <img
+                            src={getImageUrl(restaurant.picture_url)}
+                            alt={restaurant.name}
+                            className="relative z-1 h-full w-full object-contain transition-transform duration-300 group-hover:scale-105"
+                          />
+                        </>
                       ) : (
                         <div className="flex flex-col items-center gap-1.5 text-center">
                           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm text-lg">

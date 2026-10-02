@@ -72,7 +72,7 @@ export default function AdminProfileDetailPage() {
                     width={96}
                     height={96}
                     unoptimized
-                    className="h-24 w-24 rounded-2xl object-cover ring-2 ring-amber-500/20 shadow-xs"
+                    className="h-24 w-24 rounded-2xl object-contain bg-slate-100 ring-2 ring-amber-500/20 shadow-xs p-1"
                   />
                   <div>
                     <h2 className="text-lg font-bold text-slate-900">{profileTitle}</h2>

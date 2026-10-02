@@ -69,10 +69,11 @@ export default function OwnerRestaurantDetailPage() {
     description: "",
   });
 
-  // Facebook-style Crop & Scale Modal State
+  // Picture Preview & Crop Modal State
   const [cropModal, setCropModal] = useState<{
     open: boolean;
     imageSrc: string | null;
+    originalFile?: File | null;
     aspectRatio: CropAspectRatio;
     title: string;
     targetType: "restaurant" | "food";
@@ -80,8 +81,9 @@ export default function OwnerRestaurantDetailPage() {
   }>({
     open: false,
     imageSrc: null,
+    originalFile: null,
     aspectRatio: "cover",
-    title: "Scale & Position Photo",
+    title: "Picture Preview & Crop Options",
     targetType: "restaurant",
   });
 
@@ -268,8 +270,8 @@ export default function OwnerRestaurantDetailPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast("Picture exceeds 10 MB limit. Please select an image under 10 MB.", "danger");
+    if (file.size > 25 * 1024 * 1024) {
+      toast("Picture exceeds 25 MB limit. Please select an image under 25 MB.", "danger");
       e.target.value = "";
       return;
     }
@@ -279,8 +281,9 @@ export default function OwnerRestaurantDetailPage() {
       setCropModal({
         open: true,
         imageSrc: reader.result as string,
+        originalFile: file,
         aspectRatio: "food",
-        title: "Scale & Position Dish Photo",
+        title: "Dish Photo Preview & Crop",
         targetType: "food",
         targetFoodId: foodId,
       });
@@ -293,8 +296,8 @@ export default function OwnerRestaurantDetailPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast("Picture exceeds 10 MB limit. Please select an image under 10 MB.", "danger");
+    if (file.size > 25 * 1024 * 1024) {
+      toast("Picture exceeds 25 MB limit. Please select an image under 25 MB.", "danger");
       e.target.value = "";
       return;
     }
@@ -304,8 +307,9 @@ export default function OwnerRestaurantDetailPage() {
       setCropModal({
         open: true,
         imageSrc: reader.result as string,
+        originalFile: file,
         aspectRatio: "cover",
-        title: "Scale & Position Restaurant Cover",
+        title: "Restaurant Cover Photo Preview & Crop",
         targetType: "restaurant",
       });
     };
@@ -445,16 +449,22 @@ export default function OwnerRestaurantDetailPage() {
           </div>
 
           {/* Restaurant Cover Image Section */}
-          <div className="relative overflow-hidden rounded-2xl border border-black/10 bg-slate-50">
-            <div className="relative h-44 sm:h-56 w-full">
+          <div className="relative overflow-hidden rounded-2xl border border-black/10 bg-slate-950">
+            <div className="relative h-52 sm:h-64 w-full flex items-center justify-center">
               {restaurant.picture_url ? (
-                <Image
-                  src={getImageUrl(restaurant.picture_url)}
-                  alt={restaurant.name}
-                  fill
-                  className="object-cover"
-                  unoptimized
-                />
+                <>
+                  <img
+                    src={getImageUrl(restaurant.picture_url)}
+                    alt=""
+                    aria-hidden="true"
+                    className="absolute inset-0 h-full w-full object-cover blur-xl opacity-40 scale-110"
+                  />
+                  <img
+                    src={getImageUrl(restaurant.picture_url)}
+                    alt={restaurant.name}
+                    className="relative z-1 h-full w-full object-contain"
+                  />
+                </>
               ) : (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 text-slate-400">
                   <span className="text-4xl">🍽️</span>
@@ -763,16 +773,21 @@ export default function OwnerRestaurantDetailPage() {
                           <>
                             <div className="space-y-2">
                               {/* Food Image thumbnail & upload button */}
-                              <div className="relative h-32 w-full rounded-xl overflow-hidden bg-slate-200 border border-black/5 flex items-center justify-center group">
+                              <div className="relative h-36 w-full rounded-xl overflow-hidden bg-slate-900/5 border border-black/5 flex items-center justify-center group">
                                 {food.picture_url ? (
-                                  <Image
-                                    src={getImageUrl(food.picture_url)}
-                                    alt={food.name}
-                                    width={320}
-                                    height={128}
-                                    unoptimized
-                                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                                  />
+                                  <>
+                                    <img
+                                      src={getImageUrl(food.picture_url)}
+                                      alt=""
+                                      aria-hidden="true"
+                                      className="absolute inset-0 h-full w-full object-cover blur-md opacity-25 scale-110"
+                                    />
+                                    <img
+                                      src={getImageUrl(food.picture_url)}
+                                      alt={food.name}
+                                      className="relative z-1 h-full w-full object-contain transition-transform duration-300 group-hover:scale-105"
+                                    />
+                                  </>
                                 ) : (
                                   <div className="flex flex-col items-center gap-1 text-slate-400">
                                     <span className="text-2xl">🍲</span>
@@ -962,6 +977,7 @@ export default function OwnerRestaurantDetailPage() {
       <ImageCropModal
         open={cropModal.open}
         imageSrc={cropModal.imageSrc}
+        originalFile={cropModal.originalFile}
         aspectRatio={cropModal.aspectRatio}
         title={cropModal.title}
         onClose={() => setCropModal((prev) => ({ ...prev, open: false }))}

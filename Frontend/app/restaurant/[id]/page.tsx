@@ -231,16 +231,22 @@ export default function RestaurantDetailsPage() {
 
               {/* Restaurant Header Card */}
               <Panel className="space-y-5 p-6 overflow-hidden">
-                <div className="relative flex h-40 sm:h-48 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 border border-amber-200/40 overflow-hidden">
+                <div className="relative flex h-48 sm:h-64 w-full items-center justify-center rounded-2xl bg-slate-950 border border-amber-200/40 overflow-hidden">
                   {restaurant.picture_url ? (
                     <>
                       <img
                         src={getImageUrl(restaurant.picture_url)}
-                        alt={restaurant.name}
-                        className="absolute inset-0 h-full w-full object-cover"
+                        alt=""
+                        aria-hidden="true"
+                        className="absolute inset-0 h-full w-full object-cover blur-xl opacity-40 scale-110"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-black/20" />
-                      <div className="relative z-10 flex flex-col items-center gap-1 text-center drop-shadow-md">
+                      <img
+                        src={getImageUrl(restaurant.picture_url)}
+                        alt={restaurant.name}
+                        className="relative z-1 h-full w-full object-contain"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/30 pointer-events-none z-2" />
+                      <div className="absolute bottom-4 left-4 z-10 flex flex-col items-start gap-1 drop-shadow-md">
                         <span className="text-xl font-extrabold text-white sm:text-2xl drop-shadow">{restaurant.name}</span>
                       </div>
                     </>
@@ -327,13 +333,21 @@ export default function RestaurantDetailsPage() {
                       {items.map((food) => (
                         <Panel key={food.food_id} className="space-y-3 p-4 flex flex-col justify-between">
                           <div className="space-y-2">
-                            <div className="relative flex h-28 w-full items-center justify-center rounded-xl bg-gradient-to-br from-amber-50 to-slate-100 border border-black/5 overflow-hidden">
+                            <div className="relative flex h-36 w-full items-center justify-center rounded-xl bg-slate-900/5 border border-black/5 overflow-hidden">
                               {food.picture_url ? (
-                                <img
-                                  src={getImageUrl(food.picture_url)}
-                                  alt={food.name}
-                                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 hover:scale-105"
-                                />
+                                <>
+                                  <img
+                                    src={getImageUrl(food.picture_url)}
+                                    alt=""
+                                    aria-hidden="true"
+                                    className="absolute inset-0 h-full w-full object-cover blur-md opacity-25 scale-110"
+                                  />
+                                  <img
+                                    src={getImageUrl(food.picture_url)}
+                                    alt={food.name}
+                                    className="relative z-1 h-full w-full object-contain transition-transform duration-300 hover:scale-105"
+                                  />
+                                </>
                               ) : (
                                 <div className="flex flex-col items-center gap-1">
                                   <span className="text-xl">🍲</span>
@@ -534,13 +548,21 @@ export default function RestaurantDetailsPage() {
             onClose={() => setSelectedFood(null)}
           >
             <div className="space-y-4 text-xs text-slate-700">
-              <div className="relative flex h-40 w-full items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-100 to-orange-50 border border-amber-200/60 overflow-hidden">
+              <div className="relative flex h-48 w-full items-center justify-center rounded-2xl bg-slate-900/5 border border-amber-200/60 overflow-hidden">
                 {selectedFood.picture_url ? (
-                  <img
-                    src={getImageUrl(selectedFood.picture_url)}
-                    alt={selectedFood.name}
-                    className="h-full w-full object-cover"
-                  />
+                  <>
+                    <img
+                      src={getImageUrl(selectedFood.picture_url)}
+                      alt=""
+                      aria-hidden="true"
+                      className="absolute inset-0 h-full w-full object-cover blur-md opacity-25 scale-110"
+                    />
+                    <img
+                      src={getImageUrl(selectedFood.picture_url)}
+                      alt={selectedFood.name}
+                      className="relative z-1 h-full w-full object-contain drop-shadow"
+                    />
+                  </>
                 ) : (
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-3xl">🍲</span>

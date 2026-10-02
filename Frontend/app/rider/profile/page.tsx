@@ -25,9 +25,11 @@ export default function RiderProfilePage() {
   const [cropModal, setCropModal] = useState<{
     open: boolean;
     imageSrc: string;
+    originalFile?: File | null;
   }>({
     open: false,
     imageSrc: "",
+    originalFile: null,
   });
 
   // Static base location state
@@ -77,8 +79,8 @@ export default function RiderProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast("Picture exceeds 10 MB limit. Please select an image under 10 MB.", "danger");
+    if (file.size > 25 * 1024 * 1024) {
+      toast("Picture exceeds 25 MB limit. Please select an image under 25 MB.", "danger");
       e.target.value = "";
       return;
     }
@@ -88,6 +90,7 @@ export default function RiderProfilePage() {
       setCropModal({
         open: true,
         imageSrc: reader.result as string,
+        originalFile: file,
       });
     };
     reader.readAsDataURL(file);
@@ -280,14 +283,19 @@ export default function RiderProfilePage() {
               <div className="relative group shrink-0">
                 <div className="h-24 w-24 rounded-2xl overflow-hidden border-2 border-white ring-2 ring-amber-500/20 shadow-md bg-slate-100 flex items-center justify-center relative">
                   {profile?.pfp_url ? (
-                    <Image
-                      src={getImageUrl(profile.pfp_url)}
-                      alt={profile.name || profile.username || "Rider Avatar"}
-                      width={96}
-                      height={96}
-                      unoptimized
-                      className="h-full w-full object-cover"
-                    />
+                    <>
+                      <img
+                        src={getImageUrl(profile.pfp_url)}
+                        alt=""
+                        aria-hidden="true"
+                        className="absolute inset-0 h-full w-full object-cover blur-sm opacity-40 scale-110"
+                      />
+                      <img
+                        src={getImageUrl(profile.pfp_url)}
+                        alt={profile.name || profile.username || "Rider Avatar"}
+                        className="relative z-1 h-full w-full object-contain"
+                      />
+                    </>
                   ) : (
                     <span className="text-3xl">🚴</span>
                   )}
@@ -409,8 +417,9 @@ export default function RiderProfilePage() {
       <ImageCropModal
         open={cropModal.open}
         imageSrc={cropModal.imageSrc}
+        originalFile={cropModal.originalFile}
         aspectRatio="square"
-        title="Crop & Scale Rider Profile Picture"
+        title="Rider Profile Picture Preview & Options"
         onClose={() => setCropModal((prev) => ({ ...prev, open: false }))}
         onCropComplete={handleCropComplete}
       />

@@ -41,7 +41,7 @@ export default function RiderHistoryPage() {
                       <img
                         src={getImageUrl(order.restaurant_picture_url)}
                         alt={order.restaurant_name}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain"
                       />
                     ) : (
                       <span className="text-xl">🍽️</span>

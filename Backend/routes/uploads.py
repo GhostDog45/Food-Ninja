@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 uploads_bp = Blueprint("uploads", __name__)
 
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 Megabytes
+MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 Megabytes
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
 
 BACKEND_UPLOADS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
@@ -53,10 +53,10 @@ def _save_file(file_storage, subfolder: str, prefix: str):
     if not _allowed_file(file_storage.filename):
         return None, f"Unsupported file type. Allowed formats: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
 
-    # Read bytes and check size limit (5MB)
+    # Read bytes and check size limit (25MB)
     content = file_storage.read()
     if len(content) > MAX_FILE_SIZE:
-        return None, f"Picture size exceeds the 5 MB limit (file size: {len(content) / (1024 * 1024):.2f} MB)"
+        return None, f"Picture size exceeds the 25 MB limit (file size: {len(content) / (1024 * 1024):.2f} MB)"
 
     clean_prefix = secure_filename(prefix)
     public_id = f"{clean_prefix}_{uuid.uuid4().hex[:8]}"

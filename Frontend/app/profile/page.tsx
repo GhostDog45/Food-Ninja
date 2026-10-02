@@ -34,9 +34,11 @@ export default function CustomerProfilePage() {
   const [cropModal, setCropModal] = useState<{
     open: boolean;
     imageSrc: string;
+    originalFile?: File | null;
   }>({
     open: false,
     imageSrc: "",
+    originalFile: null,
   });
   const [profileDetails, setProfileDetails] = useState<Record<string, any> | null>(null);
 
@@ -105,8 +107,8 @@ export default function CustomerProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast("Picture exceeds 10 MB limit. Please select an image under 10 MB.", "danger");
+    if (file.size > 25 * 1024 * 1024) {
+      toast("Picture exceeds 25 MB limit. Please select an image under 25 MB.", "danger");
       e.target.value = "";
       return;
     }
@@ -116,6 +118,7 @@ export default function CustomerProfilePage() {
       setCropModal({
         open: true,
         imageSrc: reader.result as string,
+        originalFile: file,
       });
     };
     reader.readAsDataURL(file);
@@ -305,11 +308,19 @@ export default function CustomerProfilePage() {
               <div className="relative group shrink-0">
                 <div className="h-24 w-24 rounded-full overflow-hidden border-2 border-amber-500 shadow-md bg-slate-100 flex items-center justify-center relative">
                   {liveProfile?.pfp_url ? (
-                    <img
-                      src={getImageUrl(liveProfile.pfp_url)}
-                      alt={liveProfile.name || user?.username || "Avatar"}
-                      className="h-full w-full object-cover"
-                    />
+                    <>
+                      <img
+                        src={getImageUrl(liveProfile.pfp_url)}
+                        alt=""
+                        aria-hidden="true"
+                        className="absolute inset-0 h-full w-full object-cover blur-sm opacity-40 scale-110"
+                      />
+                      <img
+                        src={getImageUrl(liveProfile.pfp_url)}
+                        alt={liveProfile.name || user?.username || "Avatar"}
+                        className="relative z-1 h-full w-full object-contain"
+                      />
+                    </>
                   ) : (
                     <span className="text-3xl">👤</span>
                   )}
@@ -655,8 +666,9 @@ export default function CustomerProfilePage() {
       <ImageCropModal
         open={cropModal.open}
         imageSrc={cropModal.imageSrc}
+        originalFile={cropModal.originalFile}
         aspectRatio="square"
-        title="Crop & Scale Profile Picture"
+        title="Profile Picture Preview & Options"
         onClose={() => setCropModal((prev) => ({ ...prev, open: false }))}
         onCropComplete={handleCropComplete}
       />

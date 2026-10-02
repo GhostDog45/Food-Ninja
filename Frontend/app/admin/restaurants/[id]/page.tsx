@@ -112,7 +112,7 @@ export default function AdminRestaurantDetailPage() {
                                 width={48}
                                 height={48}
                                 unoptimized
-                                className="h-12 w-12 rounded-xl object-cover shadow-2xs"
+                                className="h-12 w-12 rounded-xl object-contain bg-slate-100 shadow-2xs p-0.5"
                               />
                             ) : (
                               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-xs font-bold text-amber-800">
