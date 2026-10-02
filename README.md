@@ -196,12 +196,6 @@ If running the Flask API service in `Backend/`:
    ```
    The Flask API will run on `http://localhost:5000`.
 
-### Registration Email Verification
-
-Before starting the backend, configure the Brevo SMTP settings in `Backend/.env`. Use `Backend/.env.example` as a template and provide your own SMTP key and verified sender address. Never commit `.env` or share its contents.
-
-Apply `Database/schema.sql` to create the independent `email_verification` table. The registration page can then request a code from `POST /verify-email/send`; codes are sent using Brevo SMTP and expire after 10 minutes. Every account registration must include that code. The backend validates and consumes it in the same transaction that creates the account. `POST /verify-email` is also available for standalone one-time code verification.
-
 ---
 
 ## 🤝 Contributing

@@ -16,7 +16,6 @@ from routes.admin import admin_bp
 from routes.rider import rider_bp, register_websocket_routes
 from routes.user import user_bp
 from routes.uploads import uploads_bp
-from routes.email_verification import email_verification_bp
 
 
 load_dotenv()
@@ -43,7 +42,6 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(rider_bp)
 app.register_blueprint(user_bp)
 app.register_blueprint(uploads_bp)
-app.register_blueprint(email_verification_bp)
 register_websocket_routes(app)
 
 

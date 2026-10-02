@@ -10,10 +10,6 @@ import psycopg
 login_bp = Blueprint("login", __name__)
 
 
-class EmailVerificationExpired(Exception):
-    pass
-
-
 @login_bp.route("/register", methods=["POST"])
 def register():
     data = request.get_json() or {}
@@ -127,17 +123,6 @@ def register():
             "message": "Invalid email"
         }), 400
 
-    email_verification_code = data.get("email_verification_code")
-    if (
-        not isinstance(email_verification_code, str)
-        or len(email_verification_code) != 6
-        or not email_verification_code.isdigit()
-    ):
-        return jsonify({
-            "success": False,
-            "message": "A six-digit email verification code is required"
-        }), 400
-
     # Normalize phone to 01XXXXXXXXX
     phone = utils.normalize_bd_phone(phone)
 
@@ -160,13 +145,6 @@ def register():
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-
-                cur.execute(
-                    load_query("email_verification.sql", "get_valid_email_verification"),
-                    (email, email_verification_code),
-                )
-                if not cur.fetchone():
-                    raise EmailVerificationExpired
 
                 # Check whether username/email/phone already exists
                 if user_type == "admin":
@@ -267,13 +245,6 @@ def register():
                         )
                     )
 
-                cur.execute(
-                    load_query("email_verification.sql", "consume_email_verification"),
-                    (email, email_verification_code),
-                )
-                if not cur.fetchone():
-                    raise EmailVerificationExpired
-
                 conn.commit()
 
                 return jsonify({
@@ -288,12 +259,6 @@ def register():
                         else "User registered successfully"
                     )
                 }), 201
-
-    except EmailVerificationExpired:
-        return jsonify({
-            "success": False,
-            "message": "Email verification code is invalid or expired"
-        }), 400
 
     except psycopg.errors.UniqueViolation:
         return jsonify({

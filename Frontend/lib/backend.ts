@@ -29,7 +29,7 @@ export type UserRegisterPayload = {
   email: string;
   phone: string;
   password: string;
-  email_verification_code: string;
+  email_verification_code?: string;
 };
 
 export type RiderRegisterPayload = {
@@ -40,7 +40,7 @@ export type RiderRegisterPayload = {
   phone: string;
   password: string;
   vehicle: "bike" | "bicycle";
-  email_verification_code: string;
+  email_verification_code?: string;
 };
 
 export type AdminRegisterPayload = {
@@ -50,7 +50,7 @@ export type AdminRegisterPayload = {
   phone: string;
   password: string;
   admin_invitation_code: string;
-  email_verification_code: string;
+  email_verification_code?: string;
 };
 
 export type OwnerRegisterPayload = {
@@ -61,7 +61,7 @@ export type OwnerRegisterPayload = {
   phone: string;
   password: string;
   nid?: string;
-  email_verification_code: string;
+  email_verification_code?: string;
 };
 
 export type RegisterPayload = UserRegisterPayload | RiderRegisterPayload | AdminRegisterPayload | OwnerRegisterPayload;
@@ -230,46 +230,6 @@ export async function apiRegister(payload: RegisterPayload): Promise<RegisterRes
     throw new Error(data.message || "Failed to register");
   }
 
-  return data;
-}
-
-export async function apiSendEmailVerification(email: string): Promise<{ success: boolean; message: string; dev_code?: string }> {
-  let res: Response;
-  try {
-    res = await fetch(`${BACKEND_URL}/verify-email/send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-  } catch (err: any) {
-    throw new Error(
-      err?.message?.includes("Backend endpoint not found")
-        ? err.message
-        : `Cannot connect to Backend at ${BACKEND_URL}. Backend may still be spinning up.`
-    );
-  }
-  const data = await safeJsonParse(res, "Failed to send verification code");
-  if (!res.ok || !data.success) throw new Error(data.message || "Failed to send verification code");
-  return data;
-}
-
-export async function apiVerifyEmail(email: string, code: string, consume = false): Promise<{ success: boolean; message: string }> {
-  let res: Response;
-  try {
-    res = await fetch(`${BACKEND_URL}/verify-email`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim().toLowerCase(), code: code.trim(), consume }),
-    });
-  } catch (err: any) {
-    throw new Error(
-      err?.message?.includes("Backend endpoint not found")
-        ? err.message
-        : `Cannot connect to Backend at ${BACKEND_URL}.`
-    );
-  }
-  const data = await safeJsonParse(res, "Email verification failed");
-  if (!res.ok || !data.success) throw new Error(data.message || "Email verification failed");
   return data;
 }
 
